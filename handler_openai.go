@@ -99,23 +99,55 @@ func NewOpenAIHandler(pool *AccountPool, upstream *UpstreamClient) *OpenAIHandle
 	return &OpenAIHandler{pool: pool, upstream: upstream}
 }
 
-// 内置模型列表（基于 api.md 拓包确认的真实模型）
+// 上游模型名称 → 小写友好名称的映射表
+var modelNameMapping = map[string]string{
+	"GLM_5_TOC":         "glm-5",
+	"MINIMAX_M2_1_TOC":  "minimax-m2.5",
+	"GPT_5_2_TOC":       "gpt-5.2",
+	"KIMI_K2_5_TOC":     "kimi-k2.5",
+	"kat_coder_TOC":     "kat-coder-pro-v1",
+	"GLM_4_7_TOC":       "glm-4.7",
+	"DEEPSEEK_V3_2_TOC": "deepseek-v3.2",
+	"MINIMAX_M2_5_TOC":  "minimax-m2",
+}
+
+// 小写友好名称 → 上游模型名称的反向映射表（用于请求时将用户传入的小写名转回上游大写名）
+var reverseModelMapping = func() map[string]string {
+	m := make(map[string]string, len(modelNameMapping))
+	for upstream, friendly := range modelNameMapping {
+		m[friendly] = upstream
+	}
+	return m
+}()
+
+// mapModelName 将上游模型名映射为小写友好名，未在映射表中的模型将被过滤丢弃
+func mapModelName(upstreamName string) (string, bool) {
+	if friendly, ok := modelNameMapping[upstreamName]; ok {
+		return friendly, true
+	}
+	return "", false
+}
+
+// resolveModelName 将用户传入的模型名解析为上游模型名，支持小写友好名和原始上游名
+func resolveModelName(userModel string) string {
+	// 先检查是否是小写友好名，需要反向映射
+	if upstream, ok := reverseModelMapping[userModel]; ok {
+		return upstream
+	}
+	// 已经是上游名称，直接返回
+	return userModel
+}
+
+// 内置模型列表（仅 Agent 模型，使用小写友好名称）
 var builtinModels = []OAIModel{
-	// === 聊天模型 ===
-	{ID: "kwaipilot_40b", Object: "model", Created: 1700000000, OwnedBy: "codeflicker"},
-	{ID: "kat_coder", Object: "model", Created: 1700000000, OwnedBy: "codeflicker"},
-	{ID: "CLAUDE_4_5", Object: "model", Created: 1700000000, OwnedBy: "anthropic"},
-	{ID: "GPT_5_2", Object: "model", Created: 1700000000, OwnedBy: "openai"},
-	{ID: "DEEPSEEK_V3_2", Object: "model", Created: 1700000000, OwnedBy: "deepseek"},
-	// === Agent 模型 (_TOC 后缀) ===
-	{ID: "GLM_5_TOC", Object: "model", Created: 1700000000, OwnedBy: "zhipu"},
-	{ID: "GLM_4_7_TOC", Object: "model", Created: 1700000000, OwnedBy: "zhipu"},
-	{ID: "GPT_5_2_TOC", Object: "model", Created: 1700000000, OwnedBy: "openai"},
-	{ID: "KIMI_K2_5_TOC", Object: "model", Created: 1700000000, OwnedBy: "moonshot"},
-	{ID: "kat_coder_TOC", Object: "model", Created: 1700000000, OwnedBy: "codeflicker"},
-	{ID: "MINIMAX_M2_1_TOC", Object: "model", Created: 1700000000, OwnedBy: "minimax"},
-	{ID: "MINIMAX_M2_5_TOC", Object: "model", Created: 1700000000, OwnedBy: "minimax"},
-	{ID: "DEEPSEEK_V3_2_TOC", Object: "model", Created: 1700000000, OwnedBy: "deepseek"},
+	{ID: "glm-5", Object: "model", Created: 1700000000, OwnedBy: "zhipu"},
+	{ID: "glm-4.7", Object: "model", Created: 1700000000, OwnedBy: "zhipu"},
+	{ID: "gpt-5.2", Object: "model", Created: 1700000000, OwnedBy: "openai"},
+	{ID: "kimi-k2.5", Object: "model", Created: 1700000000, OwnedBy: "moonshot"},
+	{ID: "kat-coder-pro-v1", Object: "model", Created: 1700000000, OwnedBy: "codeflicker"},
+	{ID: "minimax-m2.5", Object: "model", Created: 1700000000, OwnedBy: "minimax"},
+	{ID: "minimax-m2", Object: "model", Created: 1700000000, OwnedBy: "minimax"},
+	{ID: "deepseek-v3.2", Object: "model", Created: 1700000000, OwnedBy: "deepseek"},
 }
 
 // HandleModels GET /v1/models
@@ -127,12 +159,15 @@ func (h *OpenAIHandler) HandleModels(c *gin.Context) {
 		if err == nil && len(models) > 0 {
 			oaiModels := make([]OAIModel, 0, len(models))
 			for _, m := range models {
-				oaiModels = append(oaiModels, OAIModel{
-					ID:      m.ModelType,
-					Object:  "model",
-					Created: time.Now().Unix(),
-					OwnedBy: "codeflicker",
-				})
+				// 只返回在映射表中的模型，并使用小写友好名
+				if friendlyName, ok := mapModelName(m.ModelType); ok {
+					oaiModels = append(oaiModels, OAIModel{
+						ID:      friendlyName,
+						Object:  "model",
+						Created: time.Now().Unix(),
+						OwnedBy: "codeflicker",
+					})
+				}
 			}
 			c.JSON(http.StatusOK, OAIModelList{Object: "list", Data: oaiModels})
 			return
@@ -180,8 +215,8 @@ func (h *OpenAIHandler) HandleChatCompletions(c *gin.Context) {
 		Mode:      "agent",
 		Round:     0,
 		Messages:  cfMessages,
-		Tools:     req.Tools, // 透传 tools 定义到上游
-		Model:     req.Model,
+		Tools:     req.Tools,                   // 透传 tools 定义到上游
+		Model:     resolveModelName(req.Model), // 将小写友好名转回上游模型名
 		DeviceInfo: CFDeviceInfo{
 			Platform:      "codeflicker-ide",
 			IDEVersion:    "1.101.2",

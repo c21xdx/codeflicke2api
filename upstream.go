@@ -141,34 +141,18 @@ type CFModelItem struct {
 	SupportImage bool   `json:"supportImage"`
 }
 
-// GetModels 获取模型列表
+// GetModels 获取模型列表（仅获取 Agent 模型，聊天模型已丢弃）
 func (u *UpstreamClient) GetModels(account *Account) ([]CFModelItem, error) {
-	// 获取聊天模型
-	chatURL := fmt.Sprintf("%s/api/proxy/eapi/kwaipilot/plugin/chat_model?username=%s&pluginVersion=9.6.2511250",
-		u.baseURL, account.UserID)
-
-	chatModels, err := u.fetchModels(chatURL, account)
-	if err != nil {
-		return nil, fmt.Errorf("获取聊天模型失败: %w", err)
-	}
-
-	// 获取 Agent 模型
+	// 只获取 Agent 模型
 	agentURL := fmt.Sprintf("%s/api/proxy/eapi/kwaipilot/model/list?feature=agent", u.baseURL)
 	agentModels, err := u.fetchModels(agentURL, account)
 	if err != nil {
-		// Agent 模型获取失败不影响整体，只记录日志
-		fmt.Printf("获取 Agent 模型失败: %v\n", err)
+		return nil, fmt.Errorf("获取 Agent 模型失败: %w", err)
 	}
 
-	// 合并，去重
+	// 去重
 	seen := make(map[string]bool)
 	var allModels []CFModelItem
-	for _, m := range chatModels {
-		if !seen[m.ModelType] {
-			seen[m.ModelType] = true
-			allModels = append(allModels, m)
-		}
-	}
 	for _, m := range agentModels {
 		if !seen[m.ModelType] {
 			seen[m.ModelType] = true
