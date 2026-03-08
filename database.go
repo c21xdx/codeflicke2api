@@ -9,44 +9,43 @@ import (
 	"gorm.io/gorm"
 )
 
-// Account CodeFlicker 账号
+// Account CodeFlicker 上游账号模型
 type Account struct {
 	ID        uint       `gorm:"primaryKey" json:"id"`
 	Name      string     `json:"name"`                          // 备注名
-	UserID    string     `json:"user_id"`                       // kwaipilot-username: main_xxx
-	JWTToken  string     `json:"jwt_token"`                     // Bearer JWT token
-	Email     string     `json:"email"`                         // 登录邮箱（用于刷新 token）
-	Password  string     `json:"password"`                      // 登录密码（用于刷新 token）
+	UserID    string     `json:"user_id"`                       // 上游用户标识（kwaipilot-username）
+	JWTToken  string     `json:"jwt_token"`                     // 上游 Bearer Token
+	Email     string     `json:"email"`                         // 登录邮箱
+	Password  string     `json:"password"`                      // 登录密码
 	IsActive  bool       `gorm:"default:true" json:"is_active"` // 是否启用
-	Status    string     `gorm:"default:normal" json:"status"`  // normal / error / rate_limited
-	LastUsed  *time.Time `json:"last_used"`                     // 上次使用时间
+	Status    string     `gorm:"default:normal" json:"status"`  // 状态: normal / error / rate_limited
+	LastUsed  *time.Time `json:"last_used"`                     // 最近一次使用时间
 	CreatedAt time.Time  `json:"created_at"`
 	UpdatedAt time.Time  `json:"updated_at"`
 }
 
-// APIKey 外部调用的 API Key
+// APIKey 外部调用方的 API 鉴权密钥
 type APIKey struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
-	Key       string    `gorm:"uniqueIndex" json:"key"` // sk-xxx 格式
+	Key       string    `gorm:"uniqueIndex" json:"key"` // 密钥值（sk-xxx 格式）
 	Name      string    `json:"name"`                   // 备注名
 	IsActive  bool      `gorm:"default:true" json:"is_active"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// SystemSetting 系统配置键值对（持久化存储）
+// SystemSetting 系统配置持久化存储（键值对）
 type SystemSetting struct {
 	Key   string `gorm:"primaryKey" json:"key"`
 	Value string `json:"value"`
 }
 
-// InitDB 初始化数据库连接并自动迁移
+// InitDB 初始化 SQLite 连接并执行表结构自动迁移
 func InitDB(dbPath string) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
 	if err != nil {
 		log.Fatalf("数据库连接失败: %v", err)
 	}
 
-	// 自动迁移表结构
 	if err := db.AutoMigrate(&Account{}, &APIKey{}, &SystemSetting{}); err != nil {
 		log.Fatalf("数据库迁移失败: %v", err)
 	}
@@ -54,10 +53,11 @@ func InitDB(dbPath string) *gorm.DB {
 	return db
 }
 
-// LoadSettingsIntoCfg 从数据库加载配置覆盖运行时设置
+// LoadSettingsIntoCfg 从数据库加载持久化设置，覆盖内存中的运行时配置
 func LoadSettingsIntoCfg(db *gorm.DB, cfg *AppConfig) {
 	var settings []SystemSetting
 	db.Find(&settings)
+
 	for _, s := range settings {
 		switch s.Key {
 		case "admin_token":
@@ -80,7 +80,7 @@ func LoadSettingsIntoCfg(db *gorm.DB, cfg *AppConfig) {
 	}
 }
 
-// EnsureDefaultAPIKey 确保默认 API Key 存在
+// EnsureDefaultAPIKey 检查并创建默认 API Key（首次启动时）
 func EnsureDefaultAPIKey(db *gorm.DB, defaultKey string) {
 	var count int64
 	db.Model(&APIKey{}).Where("key = ?", defaultKey).Count(&count)

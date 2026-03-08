@@ -8,7 +8,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// APIKeyAuth API Key 鉴权中间件
+// APIKeyAuth 验证请求中的 Bearer API Key 是否有效且已启用
 func APIKeyAuth(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		auth := c.GetHeader("Authorization")
@@ -24,7 +24,6 @@ func APIKeyAuth(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		// 提取 Bearer token
 		key := strings.TrimPrefix(auth, "Bearer ")
 		if key == auth {
 			c.JSON(http.StatusUnauthorized, gin.H{
@@ -38,10 +37,8 @@ func APIKeyAuth(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		// 查找 API Key
 		var apiKey APIKey
-		result := db.Where("key = ? AND is_active = ?", key, true).First(&apiKey)
-		if result.Error != nil {
+		if result := db.Where("key = ? AND is_active = ?", key, true).First(&apiKey); result.Error != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"error": gin.H{
 					"message": "无效的 API Key",
@@ -57,7 +54,8 @@ func APIKeyAuth(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
-// AdminAuth 管理面板 token 鉴权中间件（使用 cfg 指针以支持动态更新）
+// AdminAuth 管理面板鉴权中间件，支持从 Header 或 Query 参数获取 Token。
+// 使用 cfg 指针以支持运行时动态更新 Token。
 func AdminAuth(cfg *AppConfig) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token := c.GetHeader("X-Admin-Token")

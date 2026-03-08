@@ -12,21 +12,17 @@ import (
 var webFS embed.FS
 
 func main() {
-	// 加载配置
 	cfg := LoadConfig()
 
-	// 初始化数据库
 	db := InitDB(cfg.DBPath)
 	LoadSettingsIntoCfg(db, cfg)
 	EnsureDefaultAPIKey(db, cfg.DefaultAPIKey)
 
-	// 初始化组件
 	pool := NewAccountPool(db)
 	upstream := NewUpstreamClient(cfg.CodeFlickerBaseURL)
 	oaiHandler := NewOpenAIHandler(pool, upstream)
 	adminHandler := NewAdminHandler(db, cfg)
 
-	// 创建 Gin 路由
 	r := gin.Default()
 
 	// CORS 中间件
@@ -41,19 +37,18 @@ func main() {
 		c.Next()
 	})
 
-	// === OpenAI 兼容端点（需要 API Key 认证） ===
+	// OpenAI 兼容端点
 	v1 := r.Group("/v1", APIKeyAuth(db))
 	{
 		v1.GET("/models", oaiHandler.HandleModels)
 		v1.POST("/chat/completions", oaiHandler.HandleChatCompletions)
 	}
 
-	// === 管理面板 API ===
+	// 管理面板 API
 	r.POST("/admin/login", adminHandler.HandleLogin)
 
 	admin := r.Group("/admin", AdminAuth(cfg))
 	{
-		// 账号管理
 		admin.GET("/accounts", adminHandler.HandleListAccounts)
 		admin.POST("/accounts", adminHandler.HandleCreateAccount)
 		admin.POST("/accounts/batch", adminHandler.HandleBatchImport)
@@ -62,21 +57,18 @@ func main() {
 		admin.PUT("/accounts/:id", adminHandler.HandleUpdateAccount)
 		admin.DELETE("/accounts/:id", adminHandler.HandleDeleteAccount)
 
-		// Key 管理
 		admin.GET("/keys", adminHandler.HandleListKeys)
 		admin.POST("/keys", adminHandler.HandleCreateKey)
 		admin.DELETE("/keys/:id", adminHandler.HandleDeleteKey)
 		admin.PUT("/keys/:id/toggle", adminHandler.HandleToggleKey)
 
-		// 统计
 		admin.GET("/stats", adminHandler.HandleStats)
 
-		// 设置
 		admin.GET("/settings", adminHandler.HandleGetSettings)
 		admin.PUT("/settings", adminHandler.HandleUpdateSettings)
 	}
 
-	// === 管理面板静态文件 ===
+	// 管理面板前端静态文件
 	indexHTML, err := webFS.ReadFile("web/index.html")
 	if err != nil {
 		log.Fatalf("加载前端文件失败: %v", err)
@@ -85,7 +77,6 @@ func main() {
 		c.Data(http.StatusOK, "text/html; charset=utf-8", indexHTML)
 	})
 
-	// 启动服务
 	log.Printf(" CodeFlicker2API 服务启动在 :%s", cfg.Port)
 	log.Printf(" 管理面板: http://localhost:%s", cfg.Port)
 	log.Printf(" 默认 API Key: %s", cfg.DefaultAPIKey)

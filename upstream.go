@@ -11,13 +11,13 @@ import (
 	"time"
 )
 
-// UpstreamClient CodeFlicker 上游请求客户端
+// UpstreamClient 封装与 CodeFlicker 上游服务的 HTTP 通信
 type UpstreamClient struct {
 	baseURL    string
 	httpClient *http.Client
 }
 
-// NewUpstreamClient 创建上游客户端
+// NewUpstreamClient 创建上游请求客户端
 func NewUpstreamClient(baseURL string) *UpstreamClient {
 	return &UpstreamClient{
 		baseURL: baseURL,
@@ -27,7 +27,7 @@ func NewUpstreamClient(baseURL string) *UpstreamClient {
 	}
 }
 
-// buildHeaders 构建 CodeFlicker 请求头
+// buildHeaders 构建模拟 CodeFlicker IDE 客户端的请求头
 func (u *UpstreamClient) buildHeaders(account *Account) map[string]string {
 	return map[string]string{
 		"Content-Type":       "application/json;charset=UTF-8",
@@ -40,23 +40,23 @@ func (u *UpstreamClient) buildHeaders(account *Account) map[string]string {
 	}
 }
 
-// ChatCompletionRequest CodeFlicker 格式的聊天请求（按 api.md 5.1 节）
+// CFChatRequest CodeFlicker Composer V2 聊天请求体
 type CFChatRequest struct {
 	SessionID           string          `json:"sessionId"`
 	ChatID              string          `json:"chatId"`
 	Mode                string          `json:"mode"`
 	Round               int             `json:"round"`
 	Messages            []CFMessage     `json:"messages"`
-	Tools               json.RawMessage `json:"tools,omitempty"` // OpenAI tools 透传
+	Tools               json.RawMessage `json:"tools,omitempty"`
 	Model               string          `json:"model"`
 	DeviceInfo          CFDeviceInfo    `json:"deviceInfo"`
-	Rules               []string        `json:"rules,omitempty"`               // 规则列表
-	ProjectInfo         *CFProjectInfo  `json:"projectInfo,omitempty"`         // 项目信息
-	Environment         string          `json:"environment,omitempty"`         // 环境信息
-	SystemPromptVersion string          `json:"systemPromptVersion,omitempty"` // 系统提示词版本号
+	Rules               []string        `json:"rules,omitempty"`
+	ProjectInfo         *CFProjectInfo  `json:"projectInfo,omitempty"`
+	Environment         string          `json:"environment,omitempty"`
+	SystemPromptVersion string          `json:"systemPromptVersion,omitempty"`
 }
 
-// CFProjectInfo 项目信息
+// CFProjectInfo 项目上下文信息
 type CFProjectInfo struct {
 	GitURL   string `json:"gitUrl,omitempty"`
 	RepoName string `json:"repoName,omitempty"`
@@ -71,20 +71,20 @@ type CFMessage struct {
 	ToolCallID string          `json:"tool_call_id,omitempty"`
 }
 
-// CFContentPart 消息内容片段
+// CFContentPart 消息内容片段（用于 content 为数组时的元素）
 type CFContentPart struct {
 	Type string `json:"type"`
 	Text string `json:"text,omitempty"`
 }
 
-// CFDeviceInfo 设备信息
+// CFDeviceInfo 客户端设备信息
 type CFDeviceInfo struct {
 	Platform      string `json:"platform"`
 	IDEVersion    string `json:"ideVersion"`
 	PluginVersion string `json:"pluginVersion"`
 }
 
-// CFSSEEvent CodeFlicker SSE 事件
+// CFSSEEvent CodeFlicker SSE 事件载体
 type CFSSEEvent struct {
 	Type    string          `json:"type"`
 	Data    json.RawMessage `json:"data,omitempty"`
@@ -94,7 +94,7 @@ type CFSSEEvent struct {
 	Reply   string          `json:"reply,omitempty"`
 }
 
-// CFChatData SSE data 字段中的对话数据
+// CFChatData SSE data 事件中的聊天补全数据
 type CFChatData struct {
 	ID      string     `json:"id"`
 	Object  string     `json:"object"`
@@ -104,34 +104,34 @@ type CFChatData struct {
 	Usage   *CFUsage   `json:"usage,omitempty"`
 }
 
-// CFChoice 选项
+// CFChoice 补全选项
 type CFChoice struct {
 	Message      CFChoiceMessage `json:"message"`
 	FinishReason *string         `json:"finish_reason"`
 }
 
-// CFChoiceMessage 选项消息
+// CFChoiceMessage 补全选项中的消息体
 type CFChoiceMessage struct {
 	Content   string          `json:"content"`
 	Role      string          `json:"role"`
 	ToolCalls json.RawMessage `json:"tool_calls,omitempty"`
 }
 
-// CFUsage 使用量
+// CFUsage Token 用量统计
 type CFUsage struct {
 	CompletionTokens int `json:"completion_tokens"`
 	PromptTokens     int `json:"prompt_tokens"`
 	TotalTokens      int `json:"total_tokens"`
 }
 
-// CFModelResponse 模型列表响应
+// CFModelResponse 上游模型列表 API 响应
 type CFModelResponse struct {
 	Status  int             `json:"status"`
 	Message string          `json:"message"`
 	Data    json.RawMessage `json:"data"`
 }
 
-// CFModelItem 模型条目
+// CFModelItem 上游模型条目
 type CFModelItem struct {
 	ModelType    string `json:"modelType"`
 	Name         string `json:"name"`
@@ -141,37 +141,34 @@ type CFModelItem struct {
 	SupportImage bool   `json:"supportImage"`
 }
 
-// GetModels 获取模型列表（仅获取 Agent 模型，聊天模型已丢弃）
+// GetModels 获取上游 Agent 模型列表并去重
 func (u *UpstreamClient) GetModels(account *Account) ([]CFModelItem, error) {
-	// 只获取 Agent 模型
 	agentURL := fmt.Sprintf("%s/api/proxy/eapi/kwaipilot/model/list?feature=agent", u.baseURL)
 	agentModels, err := u.fetchModels(agentURL, account)
 	if err != nil {
 		return nil, fmt.Errorf("获取 Agent 模型失败: %w", err)
 	}
 
-	// 去重
 	seen := make(map[string]bool)
-	var allModels []CFModelItem
+	var models []CFModelItem
 	for _, m := range agentModels {
 		if !seen[m.ModelType] {
 			seen[m.ModelType] = true
-			allModels = append(allModels, m)
+			models = append(models, m)
 		}
 	}
 
-	return allModels, nil
+	return models, nil
 }
 
-// fetchModels 从指定 URL 获取模型列表
+// fetchModels 从指定 URL 拉取并解析模型列表
 func (u *UpstreamClient) fetchModels(url string, account *Account) ([]CFModelItem, error) {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	headers := u.buildHeaders(account)
-	for k, v := range headers {
+	for k, v := range u.buildHeaders(account) {
 		req.Header.Set(k, v)
 	}
 
@@ -188,22 +185,23 @@ func (u *UpstreamClient) fetchModels(url string, account *Account) ([]CFModelIte
 
 	var cfResp CFModelResponse
 	if err := json.Unmarshal(body, &cfResp); err != nil {
-		return nil, fmt.Errorf("解析响应失败: %w, body: %s", err, string(body))
+		return nil, fmt.Errorf("响应解析失败: %w, body: %s", err, string(body))
 	}
 
 	if cfResp.Status != 200 {
-		return nil, fmt.Errorf("上游返回错误: status=%d, message=%s", cfResp.Status, cfResp.Message)
+		return nil, fmt.Errorf("上游错误: status=%d, message=%s", cfResp.Status, cfResp.Message)
 	}
 
 	var models []CFModelItem
 	if err := json.Unmarshal(cfResp.Data, &models); err != nil {
-		return nil, fmt.Errorf("解析模型列表失败: %w", err)
+		return nil, fmt.Errorf("模型列表解析失败: %w", err)
 	}
 
 	return models, nil
 }
 
-// StreamChatCompletion 流式聊天补全
+// StreamChatCompletion 向上游发送聊天请求并返回 SSE 流式响应。
+// 使用无超时的 HTTP Client，因为 SSE 流可能持续较长时间。
 func (u *UpstreamClient) StreamChatCompletion(account *Account, cfReq *CFChatRequest) (*http.Response, error) {
 	url := fmt.Sprintf("%s/api/proxy/sse/eapi/kwaipilot/plugin/composer/v2/chat/completions", u.baseURL)
 
@@ -217,53 +215,49 @@ func (u *UpstreamClient) StreamChatCompletion(account *Account, cfReq *CFChatReq
 		return nil, err
 	}
 
-	headers := u.buildHeaders(account)
-	for k, v := range headers {
+	for k, v := range u.buildHeaders(account) {
 		req.Header.Set(k, v)
 	}
 	req.Header.Set("Accept", "text/event-stream")
 
-	// 使用不带超时的 client，因为 SSE 可能持续很长时间
 	client := &http.Client{Timeout: 0}
 	return client.Do(req)
 }
 
-// ParseSSEStream 解析 CodeFlicker SSE 流，通过 channel 返回事件
+// ParseSSEStream 解析 CodeFlicker SSE 流，通过 channel 异步返回解析后的事件。
+// 遇到 [DONE] 标记或流结束时关闭 channel。
 func ParseSSEStream(reader io.Reader) <-chan CFSSEEvent {
 	ch := make(chan CFSSEEvent, 64)
 
 	go func() {
 		defer close(ch)
 		scanner := bufio.NewScanner(reader)
-		// 增加缓冲区大小以处理长行
 		buf := make([]byte, 0, 1024*1024)
 		scanner.Buffer(buf, 1024*1024)
 
 		for scanner.Scan() {
 			line := scanner.Text()
 
-			// 跳过空行和注释行
 			if line == "" || strings.HasPrefix(line, ":") {
 				continue
 			}
 
-			// 解析 data: 前缀
-			if strings.HasPrefix(line, "data:") {
-				data := strings.TrimPrefix(line, "data:")
-				data = strings.TrimSpace(data)
-
-				if data == "[DONE]" {
-					return
-				}
-
-				var event CFSSEEvent
-				if err := json.Unmarshal([]byte(data), &event); err != nil {
-					// 可能是纯文本数据，包装为 data 事件
-					continue
-				}
-
-				ch <- event
+			if !strings.HasPrefix(line, "data:") {
+				continue
 			}
+
+			data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+
+			if data == "[DONE]" {
+				return
+			}
+
+			var event CFSSEEvent
+			if err := json.Unmarshal([]byte(data), &event); err != nil {
+				continue
+			}
+
+			ch <- event
 		}
 	}()
 

@@ -13,33 +13,31 @@ import (
 	"github.com/google/uuid"
 )
 
-// OpenAI 兼容请求/响应结构
-
-// OAIChatRequest OpenAI 格式聊天请求
+// OAIChatRequest OpenAI 格式的聊天补全请求
 type OAIChatRequest struct {
 	Model       string          `json:"model"`
 	Messages    []OAIMessage    `json:"messages"`
 	Stream      *bool           `json:"stream,omitempty"`
 	Temperature *float64        `json:"temperature,omitempty"`
 	MaxTokens   *int            `json:"max_tokens,omitempty"`
-	Tools       json.RawMessage `json:"tools,omitempty"` // 透传 tools 定义
+	Tools       json.RawMessage `json:"tools,omitempty"`
 }
 
-// OAIMessage OpenAI 消息
+// OAIMessage OpenAI 格式消息（content 支持 string 或 array）
 type OAIMessage struct {
 	Role       string          `json:"role"`
-	Content    json.RawMessage `json:"content"` // 可以是 string 或 array
+	Content    json.RawMessage `json:"content"`
 	ToolCalls  json.RawMessage `json:"tool_calls,omitempty"`
 	ToolCallID string          `json:"tool_call_id,omitempty"`
 }
 
-// OAIModelList OpenAI 模型列表响应
+// OAIModelList 模型列表响应
 type OAIModelList struct {
 	Object string     `json:"object"`
 	Data   []OAIModel `json:"data"`
 }
 
-// OAIModel OpenAI 模型
+// OAIModel 单个模型信息
 type OAIModel struct {
 	ID      string `json:"id"`
 	Object  string `json:"object"`
@@ -47,7 +45,7 @@ type OAIModel struct {
 	OwnedBy string `json:"owned_by"`
 }
 
-// OAIChatResponse OpenAI 非流式聊天响应
+// OAIChatResponse 非流式聊天补全响应
 type OAIChatResponse struct {
 	ID      string      `json:"id"`
 	Object  string      `json:"object"`
@@ -57,7 +55,7 @@ type OAIChatResponse struct {
 	Usage   *OAIUsage   `json:"usage,omitempty"`
 }
 
-// OAIChoice 选项
+// OAIChoice 补全选项
 type OAIChoice struct {
 	Index        int             `json:"index"`
 	Message      *OAIRespMessage `json:"message,omitempty"`
@@ -65,21 +63,21 @@ type OAIChoice struct {
 	FinishReason *string         `json:"finish_reason"`
 }
 
-// OAIRespMessage 响应消息
+// OAIRespMessage 响应消息体
 type OAIRespMessage struct {
 	Role      string          `json:"role,omitempty"`
 	Content   string          `json:"content,omitempty"`
 	ToolCalls json.RawMessage `json:"tool_calls,omitempty"`
 }
 
-// OAIUsage 使用量
+// OAIUsage Token 用量统计
 type OAIUsage struct {
 	PromptTokens     int `json:"prompt_tokens"`
 	CompletionTokens int `json:"completion_tokens"`
 	TotalTokens      int `json:"total_tokens"`
 }
 
-// OAIStreamChunk 流式块
+// OAIStreamChunk 流式响应数据块
 type OAIStreamChunk struct {
 	ID      string      `json:"id"`
 	Object  string      `json:"object"`
@@ -88,18 +86,18 @@ type OAIStreamChunk struct {
 	Choices []OAIChoice `json:"choices"`
 }
 
-// OpenAIHandler OpenAI 兼容端点处理器
+// OpenAIHandler OpenAI 兼容 API 的请求处理器
 type OpenAIHandler struct {
 	pool     *AccountPool
 	upstream *UpstreamClient
 }
 
-// NewOpenAIHandler 创建处理器
+// NewOpenAIHandler 创建 OpenAI 兼容处理器
 func NewOpenAIHandler(pool *AccountPool, upstream *UpstreamClient) *OpenAIHandler {
 	return &OpenAIHandler{pool: pool, upstream: upstream}
 }
 
-// 上游模型名称 → 小写友好名称的映射表
+// modelNameMapping 上游模型标识 → 用户友好名称
 var modelNameMapping = map[string]string{
 	"GLM_5_TOC":         "glm-5",
 	"MINIMAX_M2_1_TOC":  "minimax-m2.5",
@@ -111,7 +109,7 @@ var modelNameMapping = map[string]string{
 	"MINIMAX_M2_5_TOC":  "minimax-m2",
 }
 
-// 小写友好名称 → 上游模型名称的反向映射表（用于请求时将用户传入的小写名转回上游大写名）
+// reverseModelMapping 用户友好名称 → 上游模型标识（启动时自动生成）
 var reverseModelMapping = func() map[string]string {
 	m := make(map[string]string, len(modelNameMapping))
 	for upstream, friendly := range modelNameMapping {
@@ -120,25 +118,21 @@ var reverseModelMapping = func() map[string]string {
 	return m
 }()
 
-// mapModelName 将上游模型名映射为小写友好名，未在映射表中的模型将被过滤丢弃
+// mapModelName 将上游模型标识转换为用户友好名称
 func mapModelName(upstreamName string) (string, bool) {
-	if friendly, ok := modelNameMapping[upstreamName]; ok {
-		return friendly, true
-	}
-	return "", false
+	friendly, ok := modelNameMapping[upstreamName]
+	return friendly, ok
 }
 
-// resolveModelName 将用户传入的模型名解析为上游模型名，支持小写友好名和原始上游名
+// resolveModelName 将用户传入的模型名解析为上游标识，支持友好名和原始名
 func resolveModelName(userModel string) string {
-	// 先检查是否是小写友好名，需要反向映射
 	if upstream, ok := reverseModelMapping[userModel]; ok {
 		return upstream
 	}
-	// 已经是上游名称，直接返回
 	return userModel
 }
 
-// 内置模型列表（仅 Agent 模型，使用小写友好名称）
+// builtinModels 内置模型列表，作为上游不可用时的降级方案
 var builtinModels = []OAIModel{
 	{ID: "glm-5", Object: "model", Created: 1700000000, OwnedBy: "zhipu"},
 	{ID: "glm-4.7", Object: "model", Created: 1700000000, OwnedBy: "zhipu"},
@@ -150,22 +144,18 @@ var builtinModels = []OAIModel{
 	{ID: "deepseek-v3.2", Object: "model", Created: 1700000000, OwnedBy: "deepseek"},
 }
 
-// HandleModels GET /v1/models
+// HandleModels 返回可用模型列表，优先从上游获取，失败时降级为内置列表
 func (h *OpenAIHandler) HandleModels(c *gin.Context) {
-	// 优先尝试从上游获取模型列表
 	account, err := h.pool.GetNextAccount()
 	if err == nil {
 		models, err := h.upstream.GetModels(account)
 		if err == nil && len(models) > 0 {
 			oaiModels := make([]OAIModel, 0, len(models))
 			for _, m := range models {
-				// 只返回在映射表中的模型，并使用小写友好名
 				if friendlyName, ok := mapModelName(m.ModelType); ok {
 					oaiModels = append(oaiModels, OAIModel{
-						ID:      friendlyName,
-						Object:  "model",
-						Created: time.Now().Unix(),
-						OwnedBy: "codeflicker",
+						ID: friendlyName, Object: "model",
+						Created: time.Now().Unix(), OwnedBy: "codeflicker",
 					})
 				}
 			}
@@ -173,68 +163,43 @@ func (h *OpenAIHandler) HandleModels(c *gin.Context) {
 			return
 		}
 	}
-
-	// 回退到内置模型列表
 	c.JSON(http.StatusOK, OAIModelList{Object: "list", Data: builtinModels})
 }
 
-// HandleChatCompletions POST /v1/chat/completions
+// HandleChatCompletions 处理聊天补全请求，转换 OpenAI→CodeFlicker 格式并代理
 func (h *OpenAIHandler) HandleChatCompletions(c *gin.Context) {
 	var req OAIChatRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": gin.H{
-				"message": fmt.Sprintf("请求格式错误: %v", err),
-				"type":    "invalid_request_error",
-			},
+			"error": gin.H{"message": fmt.Sprintf("请求格式错误: %v", err), "type": "invalid_request_error"},
 		})
 		return
 	}
 
-	// 获取可用账号
 	account, err := h.pool.GetNextAccount()
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"error": gin.H{
-				"message": "没有可用的账号",
-				"type":    "server_error",
-			},
+			"error": gin.H{"message": "没有可用的账号", "type": "server_error"},
 		})
 		return
 	}
 
-	// 转换消息格式
-	cfMessages := convertMessages(req.Messages)
-
-	// 构建 CodeFlicker 请求
-	sessionID := uuid.New().String()
-	chatID := uuid.New().String()
 	cfReq := &CFChatRequest{
-		SessionID: sessionID,
-		ChatID:    chatID,
+		SessionID: uuid.New().String(),
+		ChatID:    uuid.New().String(),
 		Mode:      "agent",
-		Round:     0,
-		Messages:  cfMessages,
-		Tools:     req.Tools,                   // 透传 tools 定义到上游
-		Model:     resolveModelName(req.Model), // 将小写友好名转回上游模型名
+		Messages:  convertMessages(req.Messages),
+		Tools:     req.Tools,
+		Model:     resolveModelName(req.Model),
 		DeviceInfo: CFDeviceInfo{
-			Platform:      "codeflicker-ide",
-			IDEVersion:    "1.101.2",
-			PluginVersion: "9.6.2511250",
+			Platform: "codeflicker-ide", IDEVersion: "1.101.2", PluginVersion: "9.6.2511250",
 		},
 	}
 
-	// 判断是否流式
-	isStream := req.Stream != nil && *req.Stream
-
-	// 发送上游请求
 	resp, err := h.upstream.StreamChatCompletion(account, cfReq)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{
-			"error": gin.H{
-				"message": fmt.Sprintf("上游请求失败: %v", err),
-				"type":    "upstream_error",
-			},
+			"error": gin.H{"message": fmt.Sprintf("上游请求失败: %v", err), "type": "upstream_error"},
 		})
 		return
 	}
@@ -242,19 +207,16 @@ func (h *OpenAIHandler) HandleChatCompletions(c *gin.Context) {
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		// 检查是否需要标记账号状态
 		if resp.StatusCode == 403 {
 			h.pool.MarkAccountStatus(account.ID, "error")
 		}
 		c.JSON(resp.StatusCode, gin.H{
-			"error": gin.H{
-				"message": fmt.Sprintf("上游返回错误: %s", string(body)),
-				"type":    "upstream_error",
-			},
+			"error": gin.H{"message": fmt.Sprintf("上游返回错误: %s", string(body)), "type": "upstream_error"},
 		})
 		return
 	}
 
+	isStream := req.Stream != nil && *req.Stream
 	if isStream {
 		h.handleStreamResponse(c, resp.Body, req.Model, account)
 	} else {
@@ -262,7 +224,7 @@ func (h *OpenAIHandler) HandleChatCompletions(c *gin.Context) {
 	}
 }
 
-// handleStreamResponse 处理流式响应
+// handleStreamResponse 将上游 SSE 流转换为 OpenAI 流式格式逐块输出
 func (h *OpenAIHandler) handleStreamResponse(c *gin.Context, body io.Reader, model string, account *Account) {
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
@@ -270,7 +232,6 @@ func (h *OpenAIHandler) handleStreamResponse(c *gin.Context, body io.Reader, mod
 
 	respID := "chatcmpl-" + uuid.New().String()[:8]
 	created := time.Now().Unix()
-
 	flusher, ok := c.Writer.(http.Flusher)
 	if !ok {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Streaming not supported"})
@@ -278,23 +239,15 @@ func (h *OpenAIHandler) handleStreamResponse(c *gin.Context, body io.Reader, mod
 	}
 
 	scanner := bufio.NewScanner(body)
-	buf := make([]byte, 0, 1024*1024)
-	scanner.Buffer(buf, 1024*1024)
+	scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
 
 	for scanner.Scan() {
 		line := scanner.Text()
-
-		if line == "" || strings.HasPrefix(line, ":") {
+		if line == "" || strings.HasPrefix(line, ":") || !strings.HasPrefix(line, "data:") {
 			continue
 		}
 
-		if !strings.HasPrefix(line, "data:") {
-			continue
-		}
-
-		data := strings.TrimPrefix(line, "data:")
-		data = strings.TrimSpace(data)
-
+		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
 		if data == "[DONE]" {
 			break
 		}
@@ -304,106 +257,67 @@ func (h *OpenAIHandler) handleStreamResponse(c *gin.Context, body io.Reader, mod
 			continue
 		}
 
-		// 处理错误事件
-		if event.Type == "error" {
-			// 检查是否需要标记账号状态
-			if event.Reply == "15" || event.Reply == "61" {
-				h.pool.MarkAccountStatus(account.ID, "rate_limited")
-			} else if event.Code == 403 || event.Reply == "802" {
-				h.pool.MarkAccountStatus(account.ID, "error")
+		switch event.Type {
+		case "error":
+			h.markAccountByError(event, account)
+			chunk := OAIStreamChunk{
+				ID: respID, Object: "chat.completion.chunk", Created: created, Model: model,
+				Choices: []OAIChoice{{Index: 0,
+					Delta:        &OAIRespMessage{Content: fmt.Sprintf("[错误] %s (code: %d)", event.Tip, event.Code)},
+					FinishReason: strPtr("stop"),
+				}},
 			}
-			// 发送错误信息
-			errorChunk := OAIStreamChunk{
-				ID:      respID,
-				Object:  "chat.completion.chunk",
-				Created: created,
-				Model:   model,
-				Choices: []OAIChoice{
-					{
-						Index: 0,
-						Delta: &OAIRespMessage{
-							Content: fmt.Sprintf("[错误] %s (code: %d)", event.Tip, event.Code),
-						},
-						FinishReason: strPtr("stop"),
-					},
-				},
-			}
-			chunkJSON, _ := json.Marshal(errorChunk)
+			chunkJSON, _ := json.Marshal(chunk)
 			fmt.Fprintf(c.Writer, "data: %s\n\n", chunkJSON)
 			flusher.Flush()
-			break
-		}
-
-		// 处理 ack 事件
-		if event.Type == "ack" {
+			goto done
+		case "ack":
 			continue
-		}
-
-		// 处理 data 事件
-		if event.Type == "data" {
+		case "data":
 			var chatData CFChatData
 			if err := json.Unmarshal(event.Data, &chatData); err != nil {
 				continue
 			}
-
 			for _, choice := range chatData.Choices {
 				chunk := OAIStreamChunk{
-					ID:      respID,
-					Object:  "chat.completion.chunk",
-					Created: created,
-					Model:   model,
-					Choices: []OAIChoice{
-						{
-							Index: 0,
-							Delta: &OAIRespMessage{
-								Role:      choice.Message.Role,
-								Content:   choice.Message.Content,
-								ToolCalls: choice.Message.ToolCalls,
-							},
-							FinishReason: choice.FinishReason,
+					ID: respID, Object: "chat.completion.chunk", Created: created, Model: model,
+					Choices: []OAIChoice{{Index: 0,
+						Delta: &OAIRespMessage{
+							Role: choice.Message.Role, Content: choice.Message.Content,
+							ToolCalls: choice.Message.ToolCalls,
 						},
-					},
+						FinishReason: choice.FinishReason,
+					}},
 				}
-
 				chunkJSON, _ := json.Marshal(chunk)
 				fmt.Fprintf(c.Writer, "data: %s\n\n", chunkJSON)
 				flusher.Flush()
 			}
 		}
 	}
-
-	// 发送 [DONE]
+done:
 	fmt.Fprintf(c.Writer, "data: [DONE]\n\n")
 	flusher.Flush()
 }
 
-// handleNonStreamResponse 处理非流式响应
+// handleNonStreamResponse 累积上游 SSE 流全部数据，组装为 OpenAI 非流式响应返回
 func (h *OpenAIHandler) handleNonStreamResponse(c *gin.Context, body io.Reader, model string, account *Account) {
 	respID := "chatcmpl-" + uuid.New().String()[:8]
 	created := time.Now().Unix()
-
 	var fullContent strings.Builder
 	var lastToolCalls json.RawMessage
 	var usage *OAIUsage
 
 	scanner := bufio.NewScanner(body)
-	buf := make([]byte, 0, 1024*1024)
-	scanner.Buffer(buf, 1024*1024)
+	scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
 
 	for scanner.Scan() {
 		line := scanner.Text()
-
-		if line == "" || strings.HasPrefix(line, ":") {
+		if line == "" || strings.HasPrefix(line, ":") || !strings.HasPrefix(line, "data:") {
 			continue
 		}
 
-		if !strings.HasPrefix(line, "data:") {
-			continue
-		}
-
-		data := strings.TrimPrefix(line, "data:")
-		data = strings.TrimSpace(data)
-
+		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
 		if data == "[DONE]" {
 			break
 		}
@@ -414,17 +328,9 @@ func (h *OpenAIHandler) handleNonStreamResponse(c *gin.Context, body io.Reader, 
 		}
 
 		if event.Type == "error" {
-			if event.Reply == "15" || event.Reply == "61" {
-				h.pool.MarkAccountStatus(account.ID, "rate_limited")
-			} else if event.Code == 403 || event.Reply == "802" {
-				h.pool.MarkAccountStatus(account.ID, "error")
-			}
+			h.markAccountByError(event, account)
 			c.JSON(http.StatusBadGateway, gin.H{
-				"error": gin.H{
-					"message": event.Tip,
-					"type":    "upstream_error",
-					"code":    event.Code,
-				},
+				"error": gin.H{"message": event.Tip, "type": "upstream_error", "code": event.Code},
 			})
 			return
 		}
@@ -434,14 +340,12 @@ func (h *OpenAIHandler) handleNonStreamResponse(c *gin.Context, body io.Reader, 
 			if err := json.Unmarshal(event.Data, &chatData); err != nil {
 				continue
 			}
-
 			for _, choice := range chatData.Choices {
 				fullContent.WriteString(choice.Message.Content)
 				if len(choice.Message.ToolCalls) > 0 {
 					lastToolCalls = choice.Message.ToolCalls
 				}
 			}
-
 			if chatData.Usage != nil {
 				usage = &OAIUsage{
 					PromptTokens:     chatData.Usage.PromptTokens,
@@ -452,77 +356,61 @@ func (h *OpenAIHandler) handleNonStreamResponse(c *gin.Context, body io.Reader, 
 		}
 	}
 
-	// 如果返回了 tool_calls，finish_reason 应为 "tool_calls"
 	finishReason := "stop"
 	if len(lastToolCalls) > 0 {
 		finishReason = "tool_calls"
 	}
-	resp := OAIChatResponse{
-		ID:      respID,
-		Object:  "chat.completion",
-		Created: created,
-		Model:   model,
-		Choices: []OAIChoice{
-			{
-				Index: 0,
-				Message: &OAIRespMessage{
-					Role:      "assistant",
-					Content:   fullContent.String(),
-					ToolCalls: lastToolCalls,
-				},
-				FinishReason: &finishReason,
-			},
-		},
+	c.JSON(http.StatusOK, OAIChatResponse{
+		ID: respID, Object: "chat.completion", Created: created, Model: model,
+		Choices: []OAIChoice{{Index: 0,
+			Message:      &OAIRespMessage{Role: "assistant", Content: fullContent.String(), ToolCalls: lastToolCalls},
+			FinishReason: &finishReason,
+		}},
 		Usage: usage,
-	}
-
-	c.JSON(http.StatusOK, resp)
+	})
 }
 
-// convertMessages 将 OpenAI 消息格式转换为 CodeFlicker 格式
+// markAccountByError 根据上游错误码标记账号状态
+func (h *OpenAIHandler) markAccountByError(event CFSSEEvent, account *Account) {
+	switch {
+	case event.Reply == "15" || event.Reply == "61":
+		h.pool.MarkAccountStatus(account.ID, "rate_limited")
+	case event.Code == 403 || event.Reply == "802":
+		h.pool.MarkAccountStatus(account.ID, "error")
+	}
+}
+
+// convertMessages 将 OpenAI 消息转换为 CodeFlicker 格式。
+// 执行角色映射（developer→system, function→tool）和 content 格式归一化（string→array）。
 func convertMessages(messages []OAIMessage) []CFMessage {
-	var cfMessages []CFMessage
-
+	cfMessages := make([]CFMessage, 0, len(messages))
 	for _, msg := range messages {
-		cfMsg := CFMessage{
-			Role:       msg.Role,
-			ToolCallID: msg.ToolCallID,
-		}
+		cfMsg := CFMessage{Role: msg.Role, ToolCallID: msg.ToolCallID}
 
-		// developer → system 映射
 		if cfMsg.Role == "developer" {
 			cfMsg.Role = "system"
 		}
-		// function → tool 映射
 		if cfMsg.Role == "function" {
 			cfMsg.Role = "tool"
 		}
 
-		// 处理 content：如果是字符串，转换为 [{type: "text", text: "..."}]
 		if len(msg.Content) > 0 {
 			var contentStr string
 			if err := json.Unmarshal(msg.Content, &contentStr); err == nil {
-				// 是字符串类型
 				parts := []CFContentPart{{Type: "text", Text: contentStr}}
 				contentJSON, _ := json.Marshal(parts)
 				cfMsg.Content = contentJSON
 			} else {
-				// 已经是数组类型，直接透传
 				cfMsg.Content = msg.Content
 			}
 		}
 
-		// 透传 tool_calls
 		if len(msg.ToolCalls) > 0 {
 			cfMsg.ToolCalls = msg.ToolCalls
 		}
-
 		cfMessages = append(cfMessages, cfMsg)
 	}
-
 	return cfMessages
 }
 
-func strPtr(s string) *string {
-	return &s
-}
+func strPtr(s string) *string { return &s }

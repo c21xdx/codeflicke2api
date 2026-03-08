@@ -22,12 +22,12 @@ type AdminHandler struct {
 	cfg *AppConfig
 }
 
-// NewAdminHandler 创建管理处理器
+// NewAdminHandler 创建管理面板处理器
 func NewAdminHandler(db *gorm.DB, cfg *AppConfig) *AdminHandler {
 	return &AdminHandler{db: db, cfg: cfg}
 }
 
-// HandleLogin POST /admin/login
+// HandleLogin 管理面板登录验证
 func (h *AdminHandler) HandleLogin(c *gin.Context) {
 	var req struct {
 		Token string `json:"token"`
@@ -36,25 +36,21 @@ func (h *AdminHandler) HandleLogin(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请求格式错误"})
 		return
 	}
-
 	if req.Token != h.cfg.AdminToken {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Token 错误"})
 		return
 	}
-
 	c.JSON(http.StatusOK, gin.H{"message": "登录成功", "token": h.cfg.AdminToken})
 }
 
-// === 账号管理 ===
-
-// HandleListAccounts GET /admin/accounts
+// HandleListAccounts 获取所有账号列表
 func (h *AdminHandler) HandleListAccounts(c *gin.Context) {
 	var accounts []Account
 	h.db.Order("id ASC").Find(&accounts)
 	c.JSON(http.StatusOK, gin.H{"data": accounts})
 }
 
-// HandleCreateAccount POST /admin/accounts
+// HandleCreateAccount 创建单个账号
 func (h *AdminHandler) HandleCreateAccount(c *gin.Context) {
 	var req struct {
 		Name     string `json:"name"`
@@ -65,28 +61,23 @@ func (h *AdminHandler) HandleCreateAccount(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请求格式错误"})
 		return
 	}
-
 	if req.UserID == "" || req.JWTToken == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "user_id 和 jwt_token 为必填项"})
 		return
 	}
 
 	account := Account{
-		Name:     req.Name,
-		UserID:   req.UserID,
-		JWTToken: req.JWTToken,
-		IsActive: true,
-		Status:   "normal",
+		Name: req.Name, UserID: req.UserID, JWTToken: req.JWTToken,
+		IsActive: true, Status: "normal",
 	}
 	if result := h.db.Create(&account); result.Error != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建失败: " + result.Error.Error()})
 		return
 	}
-
 	c.JSON(http.StatusOK, gin.H{"message": "创建成功", "data": account})
 }
 
-// HandleUpdateAccount PUT /admin/accounts/:id
+// HandleUpdateAccount 更新指定账号信息（支持部分更新）
 func (h *AdminHandler) HandleUpdateAccount(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -132,32 +123,28 @@ func (h *AdminHandler) HandleUpdateAccount(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "更新成功", "data": account})
 }
 
-// HandleDeleteAccount DELETE /admin/accounts/:id
+// HandleDeleteAccount 删除指定账号
 func (h *AdminHandler) HandleDeleteAccount(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的 ID"})
 		return
 	}
-
 	if result := h.db.Delete(&Account{}, id); result.Error != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除失败"})
 		return
 	}
-
 	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
 }
 
-// === API Key 管理 ===
-
-// HandleListKeys GET /admin/keys
+// HandleListKeys 获取所有 API Key 列表
 func (h *AdminHandler) HandleListKeys(c *gin.Context) {
 	var keys []APIKey
 	h.db.Order("id ASC").Find(&keys)
 	c.JSON(http.StatusOK, gin.H{"data": keys})
 }
 
-// HandleCreateKey POST /admin/keys
+// HandleCreateKey 创建 API Key
 func (h *AdminHandler) HandleCreateKey(c *gin.Context) {
 	var req struct {
 		Key  string `json:"key"`
@@ -167,42 +154,34 @@ func (h *AdminHandler) HandleCreateKey(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请求格式错误"})
 		return
 	}
-
 	if req.Key == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "key 为必填项"})
 		return
 	}
 
-	apiKey := APIKey{
-		Key:      req.Key,
-		Name:     req.Name,
-		IsActive: true,
-	}
+	apiKey := APIKey{Key: req.Key, Name: req.Name, IsActive: true}
 	if result := h.db.Create(&apiKey); result.Error != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建失败: " + result.Error.Error()})
 		return
 	}
-
 	c.JSON(http.StatusOK, gin.H{"message": "创建成功", "data": apiKey})
 }
 
-// HandleDeleteKey DELETE /admin/keys/:id
+// HandleDeleteKey 删除指定 API Key
 func (h *AdminHandler) HandleDeleteKey(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的 ID"})
 		return
 	}
-
 	if result := h.db.Delete(&APIKey{}, id); result.Error != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除失败"})
 		return
 	}
-
 	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
 }
 
-// HandleToggleKey PUT /admin/keys/:id/toggle
+// HandleToggleKey 切换 API Key 的启用/禁用状态
 func (h *AdminHandler) HandleToggleKey(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -218,13 +197,10 @@ func (h *AdminHandler) HandleToggleKey(c *gin.Context) {
 
 	key.IsActive = !key.IsActive
 	h.db.Save(&key)
-
 	c.JSON(http.StatusOK, gin.H{"message": "切换成功", "data": key})
 }
 
-// === 统计 ===
-
-// HandleStats GET /admin/stats
+// HandleStats 获取系统统计概览
 func (h *AdminHandler) HandleStats(c *gin.Context) {
 	var totalAccounts, activeAccounts, errorAccounts int64
 	var totalKeys, activeKeys int64
@@ -244,9 +220,7 @@ func (h *AdminHandler) HandleStats(c *gin.Context) {
 	})
 }
 
-// === 批量导入 ===
-
-// BatchImportItem 批量导入的账号条目
+// BatchImportItem 批量导入的单条账号数据
 type BatchImportItem struct {
 	UserID    *string `json:"userId"`
 	Username  *string `json:"username"`
@@ -256,19 +230,17 @@ type BatchImportItem struct {
 	Timestamp string  `json:"timestamp"`
 }
 
-// HandleBatchImport POST /admin/accounts/batch — 批量导入账号（JSON 数组）
+// HandleBatchImport 通过 JSON 数组批量导入账号
 func (h *AdminHandler) HandleBatchImport(c *gin.Context) {
 	var items []BatchImportItem
 	if err := c.ShouldBindJSON(&items); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "JSON 格式错误: " + err.Error()})
 		return
 	}
-
-	result := h.batchImportAccounts(items)
-	c.JSON(http.StatusOK, result)
+	c.JSON(http.StatusOK, h.batchImportAccounts(items))
 }
 
-// HandleFileImport POST /admin/accounts/import — 通过上传 JSON 文件导入账号
+// HandleFileImport 通过上传 JSON 文件批量导入账号
 func (h *AdminHandler) HandleFileImport(c *gin.Context) {
 	file, _, err := c.Request.FormFile("file")
 	if err != nil {
@@ -288,12 +260,10 @@ func (h *AdminHandler) HandleFileImport(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "JSON 解析失败: " + err.Error()})
 		return
 	}
-
-	result := h.batchImportAccounts(items)
-	c.JSON(http.StatusOK, result)
+	c.JSON(http.StatusOK, h.batchImportAccounts(items))
 }
 
-// batchImportAccounts 批量导入账号的核心逻辑
+// batchImportAccounts 批量导入账号的核心逻辑，自动从 JWT 提取 userId 并跳过重复账号
 func (h *AdminHandler) batchImportAccounts(items []BatchImportItem) gin.H {
 	var imported, skipped, failed int
 	var errors []string
@@ -305,12 +275,10 @@ func (h *AdminHandler) batchImportAccounts(items []BatchImportItem) gin.H {
 			continue
 		}
 
-		// 从 JWT 解码 userId
 		userID := ""
 		if item.UserID != nil && *item.UserID != "" {
 			userID = *item.UserID
 		} else {
-			// 从 JWT Payload 中提取 userId
 			extracted, err := extractUserIDFromJWT(item.Token)
 			if err != nil {
 				failed++
@@ -320,7 +288,6 @@ func (h *AdminHandler) batchImportAccounts(items []BatchImportItem) gin.H {
 			userID = extracted
 		}
 
-		// 检查是否已存在相同 userID 的账号
 		var count int64
 		h.db.Model(&Account{}).Where("user_id = ?", userID).Count(&count)
 		if count > 0 {
@@ -328,22 +295,15 @@ func (h *AdminHandler) batchImportAccounts(items []BatchImportItem) gin.H {
 			continue
 		}
 
-		// 构建备注名
 		name := item.Email
-		if name == "" {
-			if item.Username != nil && *item.Username != "" {
-				name = *item.Username
-			}
+		if name == "" && item.Username != nil && *item.Username != "" {
+			name = *item.Username
 		}
 
 		account := Account{
-			Name:     name,
-			UserID:   userID,
-			JWTToken: item.Token,
-			Email:    item.Email,    // 保存邮箱用于刷新 token
-			Password: item.Password, // 保存密码用于刷新 token
-			IsActive: true,
-			Status:   "normal",
+			Name: name, UserID: userID, JWTToken: item.Token,
+			Email: item.Email, Password: item.Password,
+			IsActive: true, Status: "normal",
 		}
 		if result := h.db.Create(&account); result.Error != nil {
 			failed++
@@ -355,23 +315,18 @@ func (h *AdminHandler) batchImportAccounts(items []BatchImportItem) gin.H {
 
 	return gin.H{
 		"message":  fmt.Sprintf("导入完成: 成功 %d, 跳过 %d, 失败 %d", imported, skipped, failed),
-		"imported": imported,
-		"skipped":  skipped,
-		"failed":   failed,
-		"errors":   errors,
+		"imported": imported, "skipped": skipped, "failed": failed, "errors": errors,
 	}
 }
 
-// extractUserIDFromJWT 从 JWT Token 的 Payload 中提取 userId（无需签名验证）
+// extractUserIDFromJWT 从 JWT Payload 中提取 userId 字段（不验证签名）
 func extractUserIDFromJWT(token string) (string, error) {
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
 		return "", fmt.Errorf("无效的 JWT 格式")
 	}
 
-	// 解码 Payload 部分（第二段）
 	payload := parts[1]
-	// 补齐 base64 padding
 	switch len(payload) % 4 {
 	case 2:
 		payload += "=="
@@ -390,7 +345,6 @@ func extractUserIDFromJWT(token string) (string, error) {
 	if err := json.Unmarshal(decoded, &claims); err != nil {
 		return "", fmt.Errorf("JSON 解析失败: %w", err)
 	}
-
 	if claims.UserID == "" {
 		return "", fmt.Errorf("JWT 中缺少 userId 字段")
 	}
@@ -398,9 +352,7 @@ func extractUserIDFromJWT(token string) (string, error) {
 	return claims.UserID, nil
 }
 
-// === 设置管理 ===
-
-// HandleGetSettings GET /admin/settings — 获取当前设置
+// HandleGetSettings 获取当前系统设置
 func (h *AdminHandler) HandleGetSettings(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"admin_token":         h.cfg.AdminToken,
@@ -410,7 +362,7 @@ func (h *AdminHandler) HandleGetSettings(c *gin.Context) {
 	})
 }
 
-// HandleUpdateSettings PUT /admin/settings — 更新设置
+// HandleUpdateSettings 更新系统设置并持久化到数据库
 func (h *AdminHandler) HandleUpdateSettings(c *gin.Context) {
 	var req struct {
 		AdminToken         *string `json:"admin_token"`
@@ -425,33 +377,27 @@ func (h *AdminHandler) HandleUpdateSettings(c *gin.Context) {
 
 	var messages []string
 
-	// 更新管理 Token
 	if req.AdminToken != nil && *req.AdminToken != "" {
 		h.db.Where("key = ?", "admin_token").Assign(SystemSetting{Value: *req.AdminToken}).FirstOrCreate(&SystemSetting{Key: "admin_token"})
 		h.cfg.AdminToken = *req.AdminToken
 		messages = append(messages, "管理 Token 已更新")
 	}
 
-	// 更新默认 API Key
 	if req.DefaultAPIKey != nil && *req.DefaultAPIKey != "" {
 		oldKey := h.cfg.DefaultAPIKey
 		newKey := *req.DefaultAPIKey
-		// 更新数据库中旧的 Key 记录
 		h.db.Model(&APIKey{}).Where("key = ?", oldKey).Update("key", newKey)
-		// 将新的默认 API Key 持久化到 system_settings 表
 		h.db.Where("key = ?", "default_api_key").Assign(SystemSetting{Value: newKey}).FirstOrCreate(&SystemSetting{Key: "default_api_key"})
 		h.cfg.DefaultAPIKey = newKey
 		messages = append(messages, "默认 API Key 已更新")
 	}
 
-	// 更新刷新并发数
 	if req.RefreshConcurrency != nil && *req.RefreshConcurrency > 0 {
 		h.db.Where("key = ?", "refresh_concurrency").Assign(SystemSetting{Value: strconv.Itoa(*req.RefreshConcurrency)}).FirstOrCreate(&SystemSetting{Key: "refresh_concurrency"})
 		h.cfg.RefreshConcurrency = *req.RefreshConcurrency
 		messages = append(messages, "刷新并发数已更新")
 	}
 
-	// 更新刷新重试次数
 	if req.RefreshRetries != nil && *req.RefreshRetries > 0 {
 		h.db.Where("key = ?", "refresh_retries").Assign(SystemSetting{Value: strconv.Itoa(*req.RefreshRetries)}).FirstOrCreate(&SystemSetting{Key: "refresh_retries"})
 		h.cfg.RefreshRetries = *req.RefreshRetries
@@ -472,9 +418,7 @@ func (h *AdminHandler) HandleUpdateSettings(c *gin.Context) {
 	})
 }
 
-// === Token 刷新 ===
-
-// refreshResult 单个账号刷新结果
+// refreshResult 单个账号的 Token 刷新结果
 type refreshResult struct {
 	ID      uint   `json:"id"`
 	Name    string `json:"name"`
@@ -483,27 +427,19 @@ type refreshResult struct {
 	Message string `json:"message"`
 }
 
-// HandleRefreshTokens POST /admin/accounts/refresh — 一键刷新所有账号的 JWT Token
+// HandleRefreshTokens 并发刷新所有配置了邮箱密码的账号的 JWT Token
 func (h *AdminHandler) HandleRefreshTokens(c *gin.Context) {
-	// 查找所有有 email+password 的账号
 	var accounts []Account
 	h.db.Where("email != '' AND password != ''").Find(&accounts)
 	if len(accounts) == 0 {
 		c.JSON(http.StatusOK, gin.H{
 			"message": "没有可刷新的账号（缺少 email/password）",
-			"total":   0,
-			"success": 0,
-			"failed":  0,
-			"results": []refreshResult{},
+			"total":   0, "success": 0, "failed": 0, "results": []refreshResult{},
 		})
 		return
 	}
 
-	concurrency := h.cfg.RefreshConcurrency
-	retries := h.cfg.RefreshRetries
-
-	// 并发控制
-	sem := make(chan struct{}, concurrency)
+	sem := make(chan struct{}, h.cfg.RefreshConcurrency)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var results []refreshResult
@@ -513,19 +449,14 @@ func (h *AdminHandler) HandleRefreshTokens(c *gin.Context) {
 		wg.Add(1)
 		go func(account Account) {
 			defer wg.Done()
-			sem <- struct{}{} // 获取信号量
+			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			result := refreshResult{
-				ID:    account.ID,
-				Name:  account.Name,
-				Email: account.Email,
-			}
+			result := refreshResult{ID: account.ID, Name: account.Name, Email: account.Email}
 
-			// 重试逻辑
 			var newToken string
 			var lastErr error
-			for attempt := 0; attempt < retries; attempt++ {
+			for attempt := 0; attempt < h.cfg.RefreshRetries; attempt++ {
 				newToken, lastErr = h.refreshSingleToken(account.Email, account.Password)
 				if lastErr == nil {
 					break
@@ -541,10 +472,8 @@ func (h *AdminHandler) HandleRefreshTokens(c *gin.Context) {
 				result.Message = lastErr.Error()
 				failedCount++
 			} else {
-				// 更新数据库中的 token
 				h.db.Model(&Account{}).Where("id = ?", account.ID).Updates(map[string]interface{}{
-					"jwt_token": newToken,
-					"status":    "normal",
+					"jwt_token": newToken, "status": "normal",
 				})
 				result.Success = true
 				result.Message = "刷新成功"
@@ -558,14 +487,11 @@ func (h *AdminHandler) HandleRefreshTokens(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": fmt.Sprintf("刷新完成: 成功 %d, 失败 %d", successCount, failedCount),
-		"total":   len(accounts),
-		"success": successCount,
-		"failed":  failedCount,
-		"results": results,
+		"total":   len(accounts), "success": successCount, "failed": failedCount, "results": results,
 	})
 }
 
-// refreshSingleToken 刷新单个账号的 JWT Token
+// refreshSingleToken 通过邮箱密码登录获取新的 JWT Token
 func (h *AdminHandler) refreshSingleToken(email, password string) (string, error) {
 	loginURL := h.cfg.CodeFlickerBaseURL + "/api/auth/email/login"
 
@@ -594,11 +520,11 @@ func (h *AdminHandler) refreshSingleToken(email, password string) (string, error
 		return "", fmt.Errorf("登录失败 HTTP %d: %s", resp.StatusCode, string(body))
 	}
 
-	// 从响应头获取新 token
 	authHeader := resp.Header.Get("Authorization")
 	if authHeader == "" {
 		return "", fmt.Errorf("响应中未找到 Authorization 头")
 	}
+
 	newToken := strings.TrimPrefix(authHeader, "Bearer ")
 	if newToken == "" || newToken == authHeader {
 		return "", fmt.Errorf("无效的 Authorization 头格式")
