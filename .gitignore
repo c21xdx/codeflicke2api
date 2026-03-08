@@ -1,0 +1,29 @@
+# 二进制文件
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# 敏感文档
+api.md
+
+# 数据库文件
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+.env
+.env.*
+! .env.example
+*.log
+*.tmp
+temp/
+logs/
+.agent/
+.gemini/
+/vendor/
+/bin/
+dist/
+build/
+node_modules/

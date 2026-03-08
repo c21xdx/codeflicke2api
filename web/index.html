@@ -1,0 +1,1532 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CodeFlicker2API - 管理面板</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0a0e1a;
+            --bg-secondary: #111827;
+            --bg-card: #1a1f35;
+            --bg-card-hover: #1f2642;
+            --bg-input: #0d1225;
+            --border: #2a3050;
+            --border-hover: #3d4a78;
+            --text-primary: #e8ecf4;
+            --text-secondary: #8892b0;
+            --text-muted: #5a6485;
+            --accent: #6366f1;
+            --accent-hover: #818cf8;
+            --accent-glow: rgba(99, 102, 241, 0.15);
+            --success: #10b981;
+            --success-bg: rgba(16, 185, 129, 0.1);
+            --danger: #ef4444;
+            --danger-bg: rgba(239, 68, 68, 0.1);
+            --warning: #f59e0b;
+            --warning-bg: rgba(245, 158, 11, 0.1);
+            --radius: 12px;
+            --radius-sm: 8px;
+            --shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+            --transition: all 0.2s ease;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        /* SVG 图标基础样式 */
+        .icon-svg {
+            width: 20px;
+            height: 20px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            flex-shrink: 0;
+        }
+
+        .icon-svg-lg {
+            width: 28px;
+            height: 28px;
+        }
+
+        .icon-svg-xl {
+            width: 36px;
+            height: 36px;
+        }
+
+        /* 登录页面 */
+        .login-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: radial-gradient(ellipse at 50% 0%, rgba(99, 102, 241, 0.08) 0%, transparent 60%);
+        }
+
+        .login-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 48px 40px;
+            width: 420px;
+            max-width: 90vw;
+            box-shadow: var(--shadow);
+        }
+
+        .login-card .logo {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+
+        .login-card .logo h1 {
+            font-size: 28px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            background: linear-gradient(135deg, var(--accent), #a78bfa);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .login-card .logo .logo-icon {
+            color: var(--accent);
+        }
+
+        .login-card .logo .logo-icon .icon-svg {
+            -webkit-text-fill-color: initial;
+            stroke: var(--accent);
+            width: 32px;
+            height: 32px;
+        }
+
+        .login-card .logo p {
+            color: var(--text-secondary);
+            margin-top: 8px;
+            font-size: 14px;
+        }
+
+        /* 表单元素 */
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        input,
+        textarea,
+        select {
+            width: 100%;
+            padding: 12px 16px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            font-size: 14px;
+            font-family: inherit;
+            transition: var(--transition);
+            outline: none;
+        }
+
+        input:focus,
+        textarea:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-glow);
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+            font-family: 'Consolas', monospace;
+            font-size: 12px;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 10px 20px;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-size: 14px;
+            font-weight: 500;
+            font-family: inherit;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: white;
+            width: 100%;
+            padding: 14px;
+            font-size: 15px;
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-hover);
+            transform: translateY(-1px);
+        }
+
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #059669;
+        }
+
+        .btn-danger {
+            background: transparent;
+            color: var(--danger);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .btn-danger:hover {
+            background: var(--danger-bg);
+        }
+
+        .btn-ghost {
+            background: transparent;
+            color: var(--text-secondary);
+            border: 1px solid var(--border);
+        }
+
+        .btn-ghost:hover {
+            background: var(--bg-card-hover);
+            border-color: var(--border-hover);
+            color: var(--text-primary);
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
+        .btn .icon-svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        /* 主界面 */
+        .app-container {
+            display: none;
+            min-height: 100vh;
+        }
+
+        .sidebar {
+            position: fixed;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 240px;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border);
+            padding: 24px 0;
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-logo {
+            padding: 0 24px;
+            margin-bottom: 32px;
+        }
+
+        .sidebar-logo h2 {
+            font-size: 18px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: linear-gradient(135deg, var(--accent), #a78bfa);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .sidebar-logo h2 .icon-svg {
+            -webkit-text-fill-color: initial;
+            stroke: var(--accent);
+        }
+
+        .sidebar-logo span {
+            font-size: 11px;
+            color: var(--text-muted);
+            display: block;
+            margin-top: 2px;
+            margin-left: 28px;
+        }
+
+        .nav-items {
+            flex: 1;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 24px;
+            color: var(--text-secondary);
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: var(--transition);
+            border-left: 3px solid transparent;
+        }
+
+        .nav-item:hover {
+            color: var(--text-primary);
+            background: rgba(99, 102, 241, 0.05);
+        }
+
+        .nav-item.active {
+            color: var(--accent);
+            background: var(--accent-glow);
+            border-left-color: var(--accent);
+        }
+
+        .main-content {
+            margin-left: 240px;
+            padding: 32px 40px;
+            background: radial-gradient(ellipse at 70% 0%, rgba(99, 102, 241, 0.04) 0%, transparent 50%);
+            min-height: 100vh;
+        }
+
+        .page-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 28px;
+        }
+
+        .page-header h2 {
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        .page-header p {
+            color: var(--text-secondary);
+            font-size: 14px;
+            margin-top: 4px;
+        }
+
+        .page-header .actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        /* 统计卡片 */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 28px;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 24px;
+            transition: var(--transition);
+        }
+
+        .stat-card:hover {
+            border-color: var(--border-hover);
+            transform: translateY(-2px);
+        }
+
+        .stat-card .stat-icon {
+            margin-bottom: 12px;
+            color: var(--text-secondary);
+        }
+
+        .stat-card .stat-icon.accent {
+            color: var(--accent);
+        }
+
+        .stat-card .stat-icon.success {
+            color: var(--success);
+        }
+
+        .stat-card .stat-icon.warning {
+            color: var(--warning);
+        }
+
+        .stat-card .stat-icon.key {
+            color: #f59e0b;
+        }
+
+        .stat-card .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .stat-card .stat-label {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        /* 表格 */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .card-header h3 {
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            text-align: left;
+            padding: 12px 24px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        td {
+            padding: 16px 24px;
+            font-size: 14px;
+            border-bottom: 1px solid rgba(42, 48, 80, 0.5);
+            vertical-align: middle;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:hover td {
+            background: rgba(99, 102, 241, 0.03);
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .badge-success {
+            background: var(--success-bg);
+            color: var(--success);
+        }
+
+        .badge-danger {
+            background: var(--danger-bg);
+            color: var(--danger);
+        }
+
+        .badge-warning {
+            background: var(--warning-bg);
+            color: var(--warning);
+        }
+
+        .badge .dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        .actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .token-cell {
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-family: 'Consolas', monospace;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        /* 模态框 */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+            z-index: 1000;
+            animation: fadeIn 0.2s ease;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 32px;
+            width: 560px;
+            max-width: 90vw;
+            max-height: 85vh;
+            overflow-y: auto;
+            box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
+            animation: slideUp 0.3s ease;
+        }
+
+        .modal h3 {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+            margin-top: 28px;
+        }
+
+        /* 文件拖放区 */
+        .drop-zone {
+            border: 2px dashed var(--border);
+            border-radius: var(--radius);
+            padding: 32px;
+            text-align: center;
+            cursor: pointer;
+            transition: var(--transition);
+            margin-bottom: 16px;
+        }
+
+        .drop-zone:hover,
+        .drop-zone.drag-over {
+            border-color: var(--accent);
+            background: var(--accent-glow);
+        }
+
+        .drop-zone .icon-svg {
+            margin: 0 auto 12px;
+            color: var(--text-muted);
+        }
+
+        .drop-zone p {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .drop-zone .hint {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        .drop-zone input[type="file"] {
+            display: none;
+        }
+
+        /* Tab 切换 */
+        .tabs {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 20px;
+            background: var(--bg-input);
+            padding: 4px;
+            border-radius: var(--radius-sm);
+        }
+
+        .tab {
+            flex: 1;
+            padding: 10px;
+            text-align: center;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            cursor: pointer;
+            border-radius: 6px;
+            transition: var(--transition);
+        }
+
+        .tab.active {
+            background: var(--accent);
+            color: white;
+        }
+
+        .tab:hover:not(.active) {
+            color: var(--text-primary);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* 导入结果 */
+        .import-result {
+            margin-top: 16px;
+            padding: 16px;
+            border-radius: var(--radius-sm);
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            font-size: 13px;
+        }
+
+        .import-result.success {
+            border-color: var(--success);
+        }
+
+        .import-result.error {
+            border-color: var(--danger);
+        }
+
+        /* Toast 通知 */
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .toast {
+            padding: 14px 20px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            font-size: 14px;
+            box-shadow: var(--shadow);
+            animation: slideIn 0.3s ease, fadeOut 0.3s ease 2.7s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 280px;
+        }
+
+        .toast.success {
+            border-left: 3px solid var(--success);
+        }
+
+        .toast.error {
+            border-left: 3px solid var(--danger);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 48px 24px;
+            color: var(--text-muted);
+        }
+
+        .empty-state .icon-svg {
+            margin: 0 auto 16px;
+            opacity: 0.5;
+        }
+
+        .empty-state p {
+            font-size: 14px;
+        }
+
+        .copy-btn {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 2px 6px;
+            border-radius: 4px;
+            transition: var(--transition);
+            display: inline-flex;
+            align-items: center;
+        }
+
+        .copy-btn:hover {
+            color: var(--accent);
+            background: var(--accent-glow);
+        }
+
+        .copy-btn .icon-svg {
+            width: 14px;
+            height: 14px;
+        }
+
+        .page {
+            display: none;
+        }
+
+        .page.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(40px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        @keyframes fadeOut {
+            from {
+                opacity: 1;
+            }
+
+            to {
+                opacity: 0;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 64px;
+            }
+
+            .sidebar-logo h2 span:not(.icon-svg),
+            .sidebar-logo span,
+            .nav-item span:not(:first-child) {
+                display: none;
+            }
+
+            .nav-item {
+                justify-content: center;
+                padding: 12px;
+            }
+
+            .main-content {
+                margin-left: 64px;
+                padding: 20px;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- SVG 图标定义 -->
+    <svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+        <symbol id="icon-zap" viewBox="0 0 24 24">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+        </symbol>
+        <symbol id="icon-bar-chart" viewBox="0 0 24 24">
+            <line x1="12" y1="20" x2="12" y2="10" />
+            <line x1="18" y1="20" x2="18" y2="4" />
+            <line x1="6" y1="20" x2="6" y2="16" />
+        </symbol>
+        <symbol id="icon-users" viewBox="0 0 24 24">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+        </symbol>
+        <symbol id="icon-user" viewBox="0 0 24 24">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
+        </symbol>
+        <symbol id="icon-key" viewBox="0 0 24 24">
+            <path
+                d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
+        </symbol>
+        <symbol id="icon-check-circle" viewBox="0 0 24 24">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+            <polyline points="22 4 12 14.01 9 11.01" />
+        </symbol>
+        <symbol id="icon-alert-triangle" viewBox="0 0 24 24">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+            <line x1="12" y1="9" x2="12" y2="13" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+        </symbol>
+        <symbol id="icon-log-out" viewBox="0 0 24 24">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+        </symbol>
+        <symbol id="icon-plus" viewBox="0 0 24 24">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+        </symbol>
+        <symbol id="icon-upload" viewBox="0 0 24 24">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="17 8 12 3 7 8" />
+            <line x1="12" y1="3" x2="12" y2="15" />
+        </symbol>
+        <symbol id="icon-copy" viewBox="0 0 24 24">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+        </symbol>
+        <symbol id="icon-edit" viewBox="0 0 24 24">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+        </symbol>
+        <symbol id="icon-trash" viewBox="0 0 24 24">
+            <polyline points="3 6 5 6 21 6" />
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+        </symbol>
+        <symbol id="icon-file-text" viewBox="0 0 24 24">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="16" y1="13" x2="8" y2="13" />
+            <line x1="16" y1="17" x2="8" y2="17" />
+            <polyline points="10 9 9 9 8 9" />
+        </symbol>
+        <symbol id="icon-toggle" viewBox="0 0 24 24">
+            <rect x="1" y="5" width="22" height="14" rx="7" ry="7" />
+            <circle cx="16" cy="12" r="3" />
+        </symbol>
+        <symbol id="icon-settings" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="3" />
+            <path
+                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+        </symbol>
+        <symbol id="icon-refresh" viewBox="0 0 24 24">
+            <polyline points="23 4 23 10 17 10" />
+            <polyline points="1 20 1 14 7 14" />
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+        </symbol>
+    </svg>
+
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- 登录页面 -->
+    <div class="login-container" id="loginPage">
+        <div class="login-card">
+            <div class="logo">
+                <h1>
+                    <span class="logo-icon"><svg class="icon-svg">
+                            <use href="#icon-zap" />
+                        </svg></span>
+                    CodeFlicker2API
+                </h1>
+                <p>OpenAI 兼容 API 代理管理面板</p>
+            </div>
+            <div class="form-group">
+                <label>管理 Token</label>
+                <input type="password" id="loginToken" placeholder="输入管理 Token"
+                    onkeydown="if(event.key==='Enter')login()">
+            </div>
+            <button class="btn btn-primary" onclick="login()">登 录</button>
+        </div>
+    </div>
+
+    <!-- 主界面 -->
+    <div class="app-container" id="appContainer">
+        <div class="sidebar">
+            <div class="sidebar-logo">
+                <h2><svg class="icon-svg">
+                        <use href="#icon-zap" />
+                    </svg> CF2API</h2>
+                <span>v1.0.0</span>
+            </div>
+            <div class="nav-items">
+                <div class="nav-item active" data-page="dashboard" onclick="switchPage('dashboard')">
+                    <svg class="icon-svg">
+                        <use href="#icon-bar-chart" />
+                    </svg>
+                    <span>仪表盘</span>
+                </div>
+                <div class="nav-item" data-page="accounts" onclick="switchPage('accounts')">
+                    <svg class="icon-svg">
+                        <use href="#icon-users" />
+                    </svg>
+                    <span>账号管理</span>
+                </div>
+
+                <div class="nav-item" data-page="settings" onclick="switchPage('settings')">
+                    <svg class="icon-svg">
+                        <use href="#icon-settings" />
+                    </svg>
+                    <span>设置</span>
+                </div>
+            </div>
+            <div class="nav-item" onclick="logout()">
+                <svg class="icon-svg">
+                    <use href="#icon-log-out" />
+                </svg>
+                <span>退出登录</span>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <!-- 仪表盘 -->
+            <div class="page active" id="page-dashboard">
+                <div class="page-header">
+                    <div>
+                        <h2>仪表盘</h2>
+                        <p>系统概览与服务状态</p>
+                    </div>
+                </div>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon accent"><svg class="icon-svg icon-svg-xl">
+                                <use href="#icon-users" />
+                            </svg></div>
+                        <div class="stat-value" id="statTotalAccounts">-</div>
+                        <div class="stat-label">总账号数</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon success"><svg class="icon-svg icon-svg-xl">
+                                <use href="#icon-check-circle" />
+                            </svg></div>
+                        <div class="stat-value" id="statActiveAccounts">-</div>
+                        <div class="stat-label">可用账号</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon warning"><svg class="icon-svg icon-svg-xl">
+                                <use href="#icon-alert-triangle" />
+                            </svg></div>
+                        <div class="stat-value" id="statErrorAccounts">-</div>
+                        <div class="stat-label">异常账号</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon key"><svg class="icon-svg icon-svg-xl">
+                                <use href="#icon-key" />
+                            </svg></div>
+                        <div class="stat-value" id="statActiveKeys">-</div>
+                        <div class="stat-label">活跃 Key</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3>使用说明</h3>
+                    </div>
+                    <div style="padding: 24px; color: var(--text-secondary); font-size: 14px; line-height: 1.8;">
+                        <p><strong>1. 添加账号</strong>：在「账号管理」中添加 CodeFlicker 账号的 JWT Token（userId 将自动从 JWT 解码获取）。</p>
+                        <p><strong>2. 批量导入</strong>：支持 JSON 粘贴和 JSON 文件上传批量导入账号。</p>
+                        <p><strong>3. API 调用</strong>：使用 OpenAI 兼容格式调用接口：</p>
+                        <pre
+                            style="background: var(--bg-input); padding: 16px; border-radius: 8px; margin: 12px 0; overflow-x: auto; font-size: 12px; color: var(--accent);">
+# 获取模型列表
+curl http://localhost:8080/v1/models \
+  -H "Authorization: Bearer sk-123456"
+
+# 聊天补全 (流式)
+curl http://localhost:8080/v1/chat/completions \
+  -H "Authorization: Bearer sk-123456" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "GLM_4_7_TOC",
+    "messages": [{"role": "user", "content": "Hello"}],
+    "stream": true
+  }'</pre>
+                        <p><strong>4. 多账号轮询</strong>：系统会自动在所有活跃账号间轮询分配请求。</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 账号管理 -->
+            <div class="page" id="page-accounts">
+                <div class="page-header">
+                    <div>
+                        <h2>账号管理</h2>
+                        <p>管理 CodeFlicker 上游账号</p>
+                    </div>
+                    <div class="actions">
+                        <button class="btn btn-ghost" onclick="showBatchImportModal()">
+                            <svg class="icon-svg">
+                                <use href="#icon-upload" />
+                            </svg> 批量导入
+                        </button>
+                        <button class="btn btn-success" onclick="showAddAccountModal()">
+                            <svg class="icon-svg">
+                                <use href="#icon-plus" />
+                            </svg> 添加账号
+                        </button>
+                        <button class="btn btn-ghost" id="refreshTokenBtn" onclick="refreshAllTokens()"
+                            style="border-color:var(--warning);color:var(--warning)">
+                            <svg class="icon-svg">
+                                <use href="#icon-refresh" />
+                            </svg> 一键刷新 Token
+                        </button>
+                    </div>
+                </div>
+                <div class="card">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>备注</th>
+                                <th>User ID</th>
+                                <th>JWT Token</th>
+                                <th>过期剩余</th>
+                                <th>状态</th>
+                                <th>启用</th>
+                                <th>上次使用</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="accountsTable">
+                            <tr>
+                                <td colspan="9">
+                                    <div class="empty-state"><svg class="icon-svg icon-svg-xl">
+                                            <use href="#icon-users" />
+                                        </svg>
+                                        <p>暂无账号，请点击上方按钮添加</p>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+
+            <!-- 设置 -->
+            <div class="page" id="page-settings">
+                <div class="page-header">
+                    <div>
+                        <h2>系统设置</h2>
+                        <p>修改管理 Token 和默认 API Key</p>
+                    </div>
+                </div>
+                <div class="card" style="max-width:600px">
+                    <div style="padding:24px">
+                        <div class="form-group">
+                            <label>管理面板 Token</label>
+                            <input type="text" id="settingAdminToken" placeholder="输入新的管理 Token">
+                            <p style="font-size:12px;color:var(--text-muted);margin-top:6px">修改后需使用新 Token 重新登录</p>
+                        </div>
+                        <div class="form-group">
+                            <label>默认 API Key</label>
+                            <input type="text" id="settingAPIKey" placeholder="输入新的 API Key，例如 sk-xxx">
+                            <p style="font-size:12px;color:var(--text-muted);margin-top:6px">同时更新数据库中对应的 Key 记录</p>
+                        </div>
+                        <div style="border-top:1px solid var(--border);margin:20px 0;padding-top:20px">
+                            <h4 style="font-size:14px;margin-bottom:16px;color:var(--text-secondary)">Token 刷新设置</h4>
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+                                <div class="form-group">
+                                    <label>刷新并发数</label>
+                                    <input type="number" id="settingRefreshConcurrency" min="1" max="50"
+                                        placeholder="10">
+                                </div>
+                                <div class="form-group">
+                                    <label>重试次数</label>
+                                    <input type="number" id="settingRefreshRetries" min="1" max="10" placeholder="3">
+                                </div>
+                            </div>
+                        </div>
+                        <button class="btn btn-success" onclick="saveSettings()" style="width:100%">
+                            <svg class="icon-svg">
+                                <use href="#icon-check-circle" />
+                            </svg> 保存设置
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    </div>
+
+    <!-- 添加账号模态框 -->
+    <div class="modal-overlay" id="accountModal">
+        <div class="modal">
+            <h3><svg class="icon-svg">
+                    <use href="#icon-user" />
+                </svg> <span id="accountModalTitle">添加账号</span></h3>
+            <input type="hidden" id="editAccountId">
+            <div class="form-group">
+                <label>备注名称</label>
+                <input type="text" id="accountName" placeholder="例如：账号1">
+            </div>
+            <div class="form-group">
+                <label>User ID <span style="color:var(--text-muted)">(可留空，自动从 JWT 解码)</span></label>
+                <input type="text" id="accountUserID" placeholder="例如：main_e5b42b35fc2e463f86db3e7168d85f79">
+            </div>
+            <div class="form-group">
+                <label>JWT Token *</label>
+                <textarea id="accountJWT" placeholder="粘贴 JWT Token" rows="3"></textarea>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-ghost" onclick="closeModal('accountModal')">取消</button>
+                <button class="btn btn-success" onclick="saveAccount()">保存</button>
+            </div>
+        </div>
+    </div>
+
+
+
+    <!-- 批量导入模态框 -->
+    <div class="modal-overlay" id="batchModal">
+        <div class="modal">
+            <h3><svg class="icon-svg">
+                    <use href="#icon-upload" />
+                </svg> 批量导入账号</h3>
+            <div class="tabs">
+                <div class="tab active" onclick="switchTab('paste')">JSON 粘贴</div>
+                <div class="tab" onclick="switchTab('file')">文件上传</div>
+            </div>
+
+            <div class="tab-content active" id="tab-paste">
+                <div class="form-group">
+                    <label>粘贴 JSON 数组</label>
+                    <textarea id="batchJSON" rows="10" placeholder='[
+  {
+    "userId": null,
+    "email": "user@example.com",
+    "password": "xxx",
+    "token": "eyJhbGci..."
+  },
+  ...
+]'></textarea>
+                </div>
+                <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">
+                    userId 可为 null，系统将自动从 JWT payload 解码获取
+                </p>
+                <button class="btn btn-success" onclick="submitBatchJSON()" style="width:100%">
+                    <svg class="icon-svg">
+                        <use href="#icon-upload" />
+                    </svg> 导入
+                </button>
+            </div>
+
+            <div class="tab-content" id="tab-file">
+                <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+                    <svg class="icon-svg icon-svg-xl" style="display:block;margin:0 auto 12px">
+                        <use href="#icon-file-text" />
+                    </svg>
+                    <p>点击选择或拖拽 JSON 文件到此处</p>
+                    <p class="hint">支持 .json 文件</p>
+                    <input type="file" id="fileInput" accept=".json" onchange="handleFileSelect(event)">
+                </div>
+                <div id="selectedFileName"
+                    style="display:none; padding:8px 12px; background:var(--bg-input); border-radius:6px; font-size:13px; color:var(--text-secondary); margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+                </div>
+                <button class="btn btn-success" onclick="submitFileImport()" style="width:100%" id="fileImportBtn"
+                    disabled>
+                    <svg class="icon-svg">
+                        <use href="#icon-upload" />
+                    </svg> 上传并导入
+                </button>
+            </div>
+
+            <div id="importResult"></div>
+
+            <div class="modal-actions">
+                <button class="btn btn-ghost" onclick="closeModal('batchModal')">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let adminToken = localStorage.getItem('adminToken') || '';
+
+        // === SVG 图标辅助 ===
+        function svgIcon(id, cls) { return `<svg class="icon-svg ${cls || ''}"><use href="#${id}"/></svg>`; }
+
+        // === 工具函数 ===
+        function toast(msg, type = 'success') {
+            const c = document.getElementById('toastContainer');
+            const t = document.createElement('div');
+            t.className = `toast ${type}`;
+            t.innerHTML = `${type === 'success' ? svgIcon('icon-check-circle') : svgIcon('icon-alert-triangle')} ${msg}`;
+            c.appendChild(t);
+            setTimeout(() => t.remove(), 3000);
+        }
+
+        async function api(path, options = {}) {
+            const headers = { 'Content-Type': 'application/json', 'X-Admin-Token': adminToken };
+            const resp = await fetch(path, { headers, ...options });
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.error || 'Request failed');
+            return data;
+        }
+
+        // === 登录 ===
+        function login() {
+            const token = document.getElementById('loginToken').value;
+            if (!token) { toast('请输入 Token', 'error'); return; }
+            fetch('/admin/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }) })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.token) { adminToken = data.token; localStorage.setItem('adminToken', adminToken); showApp(); toast('登录成功'); }
+                    else { toast(data.error || '登录失败', 'error'); }
+                }).catch(() => toast('网络错误', 'error'));
+        }
+
+        function logout() { adminToken = ''; localStorage.removeItem('adminToken'); document.getElementById('loginPage').style.display = 'flex'; document.getElementById('appContainer').style.display = 'none'; }
+
+        function showApp() { document.getElementById('loginPage').style.display = 'none'; document.getElementById('appContainer').style.display = 'block'; loadStats(); loadAccounts(); }
+
+        function switchPage(page) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.nav-item[data-page]').forEach(n => n.classList.remove('active'));
+            document.getElementById(`page-${page}`).classList.add('active');
+            document.querySelector(`.nav-item[data-page="${page}"]`).classList.add('active');
+            if (page === 'settings') loadSettings();
+        }
+
+        // === 统计 ===
+        async function loadStats() {
+            try {
+                const data = await api('/admin/stats');
+                document.getElementById('statTotalAccounts').textContent = data.total_accounts;
+                document.getElementById('statActiveAccounts').textContent = data.active_accounts;
+                document.getElementById('statErrorAccounts').textContent = data.error_accounts;
+                document.getElementById('statActiveKeys').textContent = data.active_keys;
+            } catch (e) { console.error(e); }
+        }
+
+        // === 账号管理 ===
+        // 从 JWT 获取过期时间（剩余秒数）
+        function getTokenExpiry(token) {
+            try {
+                const payload = decodeJWTPayload(token);
+                if (!payload || !payload.exp) return null;
+                const now = Math.floor(Date.now() / 1000);
+                return payload.exp - now; // 剩余秒数
+            } catch (e) { return null; }
+        }
+
+        // 格式化过期时间显示
+        function formatExpiry(seconds) {
+            if (seconds === null) return '<span style="color:var(--text-muted)">未知</span>';
+            if (seconds <= 0) return '<span class="badge badge-danger"><span class="dot"></span>已过期</span>';
+            const days = Math.floor(seconds / 86400);
+            const hours = Math.floor((seconds % 86400) / 3600);
+            if (days > 7) return `<span style="color:var(--success)">${days}天</span>`;
+            if (days > 1) return `<span style="color:var(--warning)">${days}天${hours}小时</span>`;
+            if (seconds > 3600) return `<span style="color:var(--warning)">${hours}小时</span>`;
+            return `<span style="color:var(--danger)">${Math.floor(seconds / 60)}分钟</span>`;
+        }
+
+        async function loadAccounts() {
+            try {
+                const data = await api('/admin/accounts');
+                const tbody = document.getElementById('accountsTable');
+                if (!data.data || data.data.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="9"><div class="empty-state">${svgIcon('icon-users', 'icon-svg-xl')}<p>暂无账号，请点击上方按钮添加</p></div></td></tr>`;
+                    return;
+                }
+                tbody.innerHTML = data.data.map(a => {
+                    const expiry = getTokenExpiry(a.jwt_token);
+                    return `
+                    <tr>
+                        <td>${a.id}</td>
+                        <td>${a.name || '-'}</td>
+                        <td class="token-cell" title="${a.user_id}">${a.user_id}</td>
+                        <td>
+                            <span class="token-cell" title="${a.jwt_token}">${a.jwt_token.substring(0, 30)}...</span>
+                            <button class="copy-btn" onclick="copyText('${a.jwt_token.replace(/'/g, "\\'")}')"> ${svgIcon('icon-copy')}</button>
+                        </td>
+                        <td style="font-size:12px;white-space:nowrap" title="${expiry !== null ? expiry + ' 秒' : '未知'}">${formatExpiry(expiry)}</td>
+                        <td>${statusBadge(a.status)}</td>
+                        <td>${a.is_active ? '<span class="badge badge-success"><span class="dot"></span>启用</span>' : '<span class="badge badge-danger"><span class="dot"></span>禁用</span>'}</td>
+                        <td style="font-size:12px;color:var(--text-muted)">${a.last_used ? new Date(a.last_used).toLocaleString() : '未使用'}</td>
+                        <td class="actions">
+                            <button class="btn btn-ghost btn-sm" onclick="editAccount(${a.id})">${svgIcon('icon-edit')} 编辑</button>
+                            <button class="btn btn-danger btn-sm" onclick="deleteAccount(${a.id})">${svgIcon('icon-trash')} 删除</button>
+                        </td>
+                    </tr>
+                `}).join('');
+            } catch (e) { toast('加载账号失败', 'error'); }
+        }
+
+        function statusBadge(status) {
+            const map = {
+                'normal': '<span class="badge badge-success"><span class="dot"></span>正常</span>',
+                'error': '<span class="badge badge-danger"><span class="dot"></span>异常</span>',
+                'rate_limited': '<span class="badge badge-warning"><span class="dot"></span>限速</span>'
+            };
+            return map[status] || status;
+        }
+
+        function showAddAccountModal() {
+            document.getElementById('accountModalTitle').textContent = '添加账号';
+            document.getElementById('editAccountId').value = '';
+            document.getElementById('accountName').value = '';
+            document.getElementById('accountUserID').value = '';
+            document.getElementById('accountJWT').value = '';
+            document.getElementById('accountModal').classList.add('active');
+        }
+
+        async function editAccount(id) {
+            try {
+                const data = await api('/admin/accounts');
+                const account = data.data.find(a => a.id === id);
+                if (!account) return;
+                document.getElementById('accountModalTitle').textContent = '编辑账号';
+                document.getElementById('editAccountId').value = id;
+                document.getElementById('accountName').value = account.name || '';
+                document.getElementById('accountUserID').value = account.user_id;
+                document.getElementById('accountJWT').value = account.jwt_token;
+                document.getElementById('accountModal').classList.add('active');
+            } catch (e) { toast('加载账号信息失败', 'error'); }
+        }
+
+        // 前端 JWT 解码
+        function decodeJWTPayload(token) {
+            try {
+                const parts = token.split('.');
+                if (parts.length !== 3) return null;
+                const payload = atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'));
+                return JSON.parse(payload);
+            } catch (e) { return null; }
+        }
+
+        async function saveAccount() {
+            const editId = document.getElementById('editAccountId').value;
+            let userId = document.getElementById('accountUserID').value.trim();
+            const jwtToken = document.getElementById('accountJWT').value.trim();
+            if (!jwtToken) { toast('JWT Token 为必填项', 'error'); return; }
+
+            // 如果 userId 为空，从 JWT 解码
+            if (!userId) {
+                const payload = decodeJWTPayload(jwtToken);
+                if (payload && payload.userId) { userId = payload.userId; }
+                else { toast('无法从 JWT 解码 userId，请手动填写', 'error'); return; }
+            }
+
+            const body = { name: document.getElementById('accountName').value, user_id: userId, jwt_token: jwtToken };
+            try {
+                if (editId) { await api(`/admin/accounts/${editId}`, { method: 'PUT', body: JSON.stringify(body) }); toast('更新成功'); }
+                else { await api('/admin/accounts', { method: 'POST', body: JSON.stringify(body) }); toast('创建成功'); }
+                closeModal('accountModal'); loadAccounts(); loadStats();
+            } catch (e) { toast(e.message, 'error'); }
+        }
+
+        async function deleteAccount(id) {
+            if (!confirm('确定删除此账号？')) return;
+            try { await api(`/admin/accounts/${id}`, { method: 'DELETE' }); toast('删除成功'); loadAccounts(); loadStats(); }
+            catch (e) { toast('删除失败', 'error'); }
+        }
+
+        // === 批量导入 ===
+        function showBatchImportModal() {
+            document.getElementById('batchJSON').value = '';
+            document.getElementById('importResult').innerHTML = '';
+            document.getElementById('fileInput').value = '';
+            document.getElementById('fileImportBtn').disabled = true;
+            switchTab('paste');
+            document.getElementById('batchModal').classList.add('active');
+        }
+
+        function switchTab(tab) {
+            document.querySelectorAll('.tabs .tab').forEach((t, i) => t.classList.toggle('active', (tab === 'paste' ? i === 0 : i === 1)));
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.getElementById(`tab-${tab}`).classList.add('active');
+            document.getElementById('importResult').innerHTML = '';
+        }
+
+        async function submitBatchJSON() {
+            const raw = document.getElementById('batchJSON').value.trim();
+            if (!raw) { toast('请粘贴 JSON 数据', 'error'); return; }
+            let items;
+            try { items = JSON.parse(raw); } catch (e) { toast('JSON 格式错误', 'error'); return; }
+            if (!Array.isArray(items)) { toast('数据必须是 JSON 数组', 'error'); return; }
+
+            try {
+                const result = await api('/admin/accounts/batch', { method: 'POST', body: JSON.stringify(items) });
+                showImportResult(result);
+                loadAccounts(); loadStats();
+            } catch (e) { toast(e.message, 'error'); }
+        }
+
+        let selectedFile = null;
+        function handleFileSelect(e) {
+            selectedFile = e.target.files[0];
+            if (selectedFile) {
+                document.getElementById('selectedFileName').style.display = 'flex';
+                document.getElementById('selectedFileName').innerHTML = `${svgIcon('icon-file-text')} ${selectedFile.name} (${(selectedFile.size / 1024).toFixed(1)} KB)`;
+                document.getElementById('fileImportBtn').disabled = false;
+            }
+        }
+
+        async function submitFileImport() {
+            if (!selectedFile) { toast('请选择文件', 'error'); return; }
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+
+            try {
+                const resp = await fetch('/admin/accounts/import', {
+                    method: 'POST',
+                    headers: { 'X-Admin-Token': adminToken },
+                    body: formData
+                });
+                const result = await resp.json();
+                if (!resp.ok) throw new Error(result.error);
+                showImportResult(result);
+                loadAccounts(); loadStats();
+            } catch (e) { toast(e.message, 'error'); }
+        }
+
+        function showImportResult(result) {
+            const el = document.getElementById('importResult');
+            const isSuccess = result.failed === 0;
+            el.innerHTML = `
+                <div class="import-result ${isSuccess ? 'success' : 'error'}">
+                    <strong>${result.message}</strong>
+                    ${result.errors && result.errors.length > 0 ? '<ul style="margin-top:8px;padding-left:20px;color:var(--danger);font-size:12px">' + result.errors.map(e => `<li>${e}</li>`).join('') + '</ul>' : ''}
+                </div>`;
+        }
+
+        // 拖放支持
+        const dropZone = document.getElementById('dropZone');
+        if (dropZone) {
+            ['dragenter', 'dragover'].forEach(e => dropZone.addEventListener(e, ev => { ev.preventDefault(); dropZone.classList.add('drag-over'); }));
+            ['dragleave', 'drop'].forEach(e => dropZone.addEventListener(e, ev => { ev.preventDefault(); dropZone.classList.remove('drag-over'); }));
+            dropZone.addEventListener('drop', ev => {
+                const file = ev.dataTransfer.files[0];
+                if (file && file.name.endsWith('.json')) {
+                    selectedFile = file;
+                    document.getElementById('selectedFileName').style.display = 'flex';
+                    document.getElementById('selectedFileName').innerHTML = `${svgIcon('icon-file-text')} ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+                    document.getElementById('fileImportBtn').disabled = false;
+                } else { toast('请选择 .json 文件', 'error'); }
+            });
+        }
+
+
+
+        // === 设置管理 ===
+        async function loadSettings() {
+            try {
+                const data = await api('/admin/settings');
+                document.getElementById('settingAdminToken').value = data.admin_token || '';
+                document.getElementById('settingAPIKey').value = data.default_api_key || '';
+                document.getElementById('settingRefreshConcurrency').value = data.refresh_concurrency || 10;
+                document.getElementById('settingRefreshRetries').value = data.refresh_retries || 3;
+            } catch (e) { console.error(e); }
+        }
+
+        async function saveSettings() {
+            const newToken = document.getElementById('settingAdminToken').value.trim();
+            const newKey = document.getElementById('settingAPIKey').value.trim();
+            const concurrency = parseInt(document.getElementById('settingRefreshConcurrency').value);
+            const retries = parseInt(document.getElementById('settingRefreshRetries').value);
+            const body = {};
+            if (newToken) body.admin_token = newToken;
+            if (newKey) body.default_api_key = newKey;
+            if (concurrency > 0) body.refresh_concurrency = concurrency;
+            if (retries > 0) body.refresh_retries = retries;
+            if (Object.keys(body).length === 0) { toast('请填写至少一项', 'error'); return; }
+            try {
+                const result = await api('/admin/settings', { method: 'PUT', body: JSON.stringify(body) });
+                toast(result.message);
+                if (body.admin_token) { adminToken = body.admin_token; localStorage.setItem('adminToken', adminToken); }
+                loadSettings(); loadKeys();
+            } catch (e) { toast(e.message, 'error'); }
+        }
+
+        // === Token 刷新 ===
+        async function refreshAllTokens() {
+            const btn = document.getElementById('refreshTokenBtn');
+            if (!confirm('确定要刷新所有账号的 JWT Token 吗？\n只有导入时包含 email/password 的账号才能刷新。')) return;
+            btn.disabled = true;
+            btn.innerHTML = `${svgIcon('icon-refresh')} 刷新中...`;
+            btn.style.opacity = '0.6';
+            try {
+                const result = await api('/admin/accounts/refresh', { method: 'POST', body: '{}' });
+                toast(result.message, result.failed > 0 ? 'error' : 'success');
+                // 显示详细结果
+                if (result.results && result.results.length > 0) {
+                    const failedResults = result.results.filter(r => !r.success);
+                    if (failedResults.length > 0) {
+                        console.warn('刷新失败的账号:', failedResults);
+                    }
+                }
+                loadAccounts(); loadStats();
+            } catch (e) { toast('刷新失败: ' + e.message, 'error'); }
+            finally {
+                btn.disabled = false;
+                btn.innerHTML = `${svgIcon('icon-refresh')} 一键刷新 Token`;
+                btn.style.opacity = '1';
+            }
+        }
+
+        // === 通用 ===
+        function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+        function copyText(text) { navigator.clipboard.writeText(text).then(() => toast('已复制到剪贴板')); }
+        document.querySelectorAll('.modal-overlay').forEach(overlay => { overlay.addEventListener('click', e => { if (e.target === overlay) overlay.classList.remove('active'); }); });
+
+        // === 初始化 ===
+        if (adminToken) {
+            fetch('/admin/stats', { headers: { 'X-Admin-Token': adminToken } })
+                .then(r => { if (r.ok) showApp(); else logout(); }).catch(() => logout());
+        }
+    </script>
+</body>
+
+</html>

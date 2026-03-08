@@ -1,0 +1,5 @@
+codeflicke2api.exe
+codeflicke2api
+*.db
+data/
+.env

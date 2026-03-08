@@ -1,0 +1,15 @@
+services:
+  codeflicke2api:
+    build: .
+    container_name: codeflicke2api
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - PORT=8080
+      - ADMIN_TOKEN=123456
+      - DEFAULT_API_KEY=sk-123456
+      - CODEFLICKER_BASE_URL=https://www.codeflicker.ai
+      - DB_PATH=/app/data/codeflicke2api.db
