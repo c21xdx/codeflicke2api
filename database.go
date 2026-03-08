@@ -76,6 +76,12 @@ func LoadSettingsIntoCfg(db *gorm.DB, cfg *AppConfig) {
 			if v, err := strconv.Atoi(s.Value); err == nil && v > 0 {
 				cfg.RefreshRetries = v
 			}
+		case "chat_retries":
+			if v, err := strconv.Atoi(s.Value); err == nil && v > 0 {
+				cfg.ChatRetries = v
+			}
+		case "proxy_url":
+			cfg.ProxyURL = s.Value
 		}
 	}
 }

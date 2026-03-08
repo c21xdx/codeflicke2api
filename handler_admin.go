@@ -18,13 +18,14 @@ import (
 
 // AdminHandler 管理面板 API 处理器
 type AdminHandler struct {
-	db  *gorm.DB
-	cfg *AppConfig
+	db       *gorm.DB
+	cfg      *AppConfig
+	upstream *UpstreamClient
 }
 
 // NewAdminHandler 创建管理面板处理器
-func NewAdminHandler(db *gorm.DB, cfg *AppConfig) *AdminHandler {
-	return &AdminHandler{db: db, cfg: cfg}
+func NewAdminHandler(db *gorm.DB, cfg *AppConfig, upstream *UpstreamClient) *AdminHandler {
+	return &AdminHandler{db: db, cfg: cfg, upstream: upstream}
 }
 
 // HandleLogin 管理面板登录验证
@@ -359,6 +360,8 @@ func (h *AdminHandler) HandleGetSettings(c *gin.Context) {
 		"default_api_key":     h.cfg.DefaultAPIKey,
 		"refresh_concurrency": h.cfg.RefreshConcurrency,
 		"refresh_retries":     h.cfg.RefreshRetries,
+		"chat_retries":        h.cfg.ChatRetries,
+		"proxy_url":           h.cfg.ProxyURL,
 	})
 }
 
@@ -369,6 +372,8 @@ func (h *AdminHandler) HandleUpdateSettings(c *gin.Context) {
 		DefaultAPIKey      *string `json:"default_api_key"`
 		RefreshConcurrency *int    `json:"refresh_concurrency"`
 		RefreshRetries     *int    `json:"refresh_retries"`
+		ChatRetries        *int    `json:"chat_retries"`
+		ProxyURL           *string `json:"proxy_url"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请求格式错误"})
@@ -404,6 +409,25 @@ func (h *AdminHandler) HandleUpdateSettings(c *gin.Context) {
 		messages = append(messages, "刷新重试次数已更新")
 	}
 
+	if req.ChatRetries != nil && *req.ChatRetries > 0 {
+		h.db.Where("key = ?", "chat_retries").Assign(SystemSetting{Value: strconv.Itoa(*req.ChatRetries)}).FirstOrCreate(&SystemSetting{Key: "chat_retries"})
+		h.cfg.ChatRetries = *req.ChatRetries
+		messages = append(messages, "请求重试次数已更新")
+	}
+
+	if req.ProxyURL != nil {
+		h.db.Where("key = ?", "proxy_url").Assign(SystemSetting{Value: *req.ProxyURL}).FirstOrCreate(&SystemSetting{Key: "proxy_url"})
+		h.cfg.ProxyURL = *req.ProxyURL
+		if h.upstream != nil {
+			h.upstream.UpdateProxy(*req.ProxyURL)
+		}
+		if *req.ProxyURL == "" {
+			messages = append(messages, "代理已关闭")
+		} else {
+			messages = append(messages, "代理地址已更新")
+		}
+	}
+
 	if len(messages) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "未提供任何修改"})
 		return
@@ -415,6 +439,8 @@ func (h *AdminHandler) HandleUpdateSettings(c *gin.Context) {
 		"default_api_key":     h.cfg.DefaultAPIKey,
 		"refresh_concurrency": h.cfg.RefreshConcurrency,
 		"refresh_retries":     h.cfg.RefreshRetries,
+		"chat_retries":        h.cfg.ChatRetries,
+		"proxy_url":           h.cfg.ProxyURL,
 	})
 }
 
@@ -508,7 +534,7 @@ func (h *AdminHandler) refreshSingleToken(email, password string) (string, error
 	req.Header.Set("Referer", h.cfg.CodeFlickerBaseURL+"/login")
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36")
 
-	client := &http.Client{Timeout: 15 * time.Second}
+	client := &http.Client{Timeout: 15 * time.Second, Transport: buildTransport(h.cfg.ProxyURL)}
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("请求失败: %w", err)

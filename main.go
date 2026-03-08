@@ -19,9 +19,9 @@ func main() {
 	EnsureDefaultAPIKey(db, cfg.DefaultAPIKey)
 
 	pool := NewAccountPool(db)
-	upstream := NewUpstreamClient(cfg.CodeFlickerBaseURL)
-	oaiHandler := NewOpenAIHandler(pool, upstream)
-	adminHandler := NewAdminHandler(db, cfg)
+	upstream := NewUpstreamClient(cfg.CodeFlickerBaseURL, cfg.ProxyURL)
+	oaiHandler := NewOpenAIHandler(pool, upstream, cfg)
+	adminHandler := NewAdminHandler(db, cfg, upstream)
 
 	r := gin.Default()
 

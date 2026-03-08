@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -90,11 +91,12 @@ type OAIStreamChunk struct {
 type OpenAIHandler struct {
 	pool     *AccountPool
 	upstream *UpstreamClient
+	cfg      *AppConfig
 }
 
 // NewOpenAIHandler 创建 OpenAI 兼容处理器
-func NewOpenAIHandler(pool *AccountPool, upstream *UpstreamClient) *OpenAIHandler {
-	return &OpenAIHandler{pool: pool, upstream: upstream}
+func NewOpenAIHandler(pool *AccountPool, upstream *UpstreamClient, cfg *AppConfig) *OpenAIHandler {
+	return &OpenAIHandler{pool: pool, upstream: upstream, cfg: cfg}
 }
 
 // modelNameMapping 上游模型标识 → 用户友好名称
@@ -166,7 +168,7 @@ func (h *OpenAIHandler) HandleModels(c *gin.Context) {
 	c.JSON(http.StatusOK, OAIModelList{Object: "list", Data: builtinModels})
 }
 
-// HandleChatCompletions 处理聊天补全请求，转换 OpenAI→CodeFlicker 格式并代理
+// HandleChatCompletions 处理聊天补全请求，转换 OpenAI→CodeFlicker 格式并代理。
 func (h *OpenAIHandler) HandleChatCompletions(c *gin.Context) {
 	var req OAIChatRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -176,51 +178,94 @@ func (h *OpenAIHandler) HandleChatCompletions(c *gin.Context) {
 		return
 	}
 
-	account, err := h.pool.GetNextAccount()
-	if err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"error": gin.H{"message": "没有可用的账号", "type": "server_error"},
-		})
-		return
+	maxRetries := h.cfg.ChatRetries
+	if maxRetries < 1 {
+		maxRetries = 1
 	}
 
-	cfReq := &CFChatRequest{
-		SessionID: uuid.New().String(),
-		ChatID:    uuid.New().String(),
-		Mode:      "agent",
-		Messages:  convertMessages(req.Messages),
-		Tools:     req.Tools,
-		Model:     resolveModelName(req.Model),
-		DeviceInfo: CFDeviceInfo{
-			Platform: "codeflicker-ide", IDEVersion: "1.101.2", PluginVersion: "9.6.2511250",
-		},
-	}
+	cfMessages := convertMessages(req.Messages)
+	upstreamModel := resolveModelName(req.Model)
 
-	resp, err := h.upstream.StreamChatCompletion(account, cfReq)
-	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{
-			"error": gin.H{"message": fmt.Sprintf("上游请求失败: %v", err), "type": "upstream_error"},
-		})
-		return
-	}
-	defer resp.Body.Close()
+	var lastErr error
+	var lastStatusCode int
+	var lastBody string
 
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		if resp.StatusCode == 403 {
-			h.pool.MarkAccountStatus(account.ID, "error")
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		account, err := h.pool.GetNextAccount()
+		if err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"error": gin.H{"message": "没有可用的账号", "type": "server_error"},
+			})
+			return
 		}
-		c.JSON(resp.StatusCode, gin.H{
-			"error": gin.H{"message": fmt.Sprintf("上游返回错误: %s", string(body)), "type": "upstream_error"},
-		})
-		return
-	}
 
-	isStream := req.Stream != nil && *req.Stream
-	if isStream {
-		h.handleStreamResponse(c, resp.Body, req.Model, account)
-	} else {
-		h.handleNonStreamResponse(c, resp.Body, req.Model, account)
+		cfReq := &CFChatRequest{
+			SessionID: uuid.New().String(),
+			ChatID:    uuid.New().String(),
+			Mode:      "agent",
+			Messages:  cfMessages,
+			Tools:     req.Tools,
+			Model:     upstreamModel,
+			DeviceInfo: CFDeviceInfo{
+				Platform: "codeflicker-ide", IDEVersion: "1.101.2", PluginVersion: "9.6.2511250",
+			},
+		}
+
+		resp, err := h.upstream.StreamChatCompletion(account, cfReq)
+		if err != nil {
+			lastErr = err
+			log.Printf("上游请求失败 (第 %d/%d 次): %v", attempt, maxRetries, err)
+			if attempt < maxRetries {
+				time.Sleep(time.Duration(attempt) * time.Second)
+				continue
+			}
+			c.JSON(http.StatusBadGateway, gin.H{
+				"error": gin.H{"message": fmt.Sprintf("上游请求失败（已重试 %d 次）: %v", maxRetries, lastErr), "type": "upstream_error"},
+			})
+			return
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			lastStatusCode = resp.StatusCode
+			lastBody = string(bodyBytes)
+
+			if resp.StatusCode == 403 {
+				h.pool.MarkAccountStatus(account.ID, "error")
+			}
+
+			if resp.StatusCode == 413 {
+				c.JSON(http.StatusRequestEntityTooLarge, gin.H{
+					"error": gin.H{"message": "超过最大 token 限制", "type": "invalid_request_error"},
+				})
+				return
+			}
+
+			log.Printf("上游返回 HTTP %d (第 %d/%d 次): %s", resp.StatusCode, attempt, maxRetries, lastBody)
+			if attempt < maxRetries {
+				time.Sleep(time.Duration(attempt) * time.Second)
+				continue
+			}
+			c.JSON(lastStatusCode, gin.H{
+				"error": gin.H{"message": fmt.Sprintf("上游返回错误（已重试 %d 次）: %s", maxRetries, lastBody), "type": "upstream_error"},
+			})
+			return
+		}
+
+		// 请求成功，处理响应
+		if attempt > 1 {
+			log.Printf("上游请求在第 %d 次重试后成功", attempt)
+		}
+
+		isStream := req.Stream != nil && *req.Stream
+		if isStream {
+			h.handleStreamResponse(c, resp.Body, req.Model, account)
+		} else {
+			h.handleNonStreamResponse(c, resp.Body, req.Model, account)
+		}
+		resp.Body.Close()
+		return
 	}
 }
 

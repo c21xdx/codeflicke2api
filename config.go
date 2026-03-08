@@ -11,6 +11,8 @@ type AppConfig struct {
 	DBPath             string // SQLite 数据库文件路径
 	RefreshConcurrency int    // Token 刷新并发数
 	RefreshRetries     int    // Token 刷新重试次数
+	ChatRetries        int    // 上游 Chat 接口请求重试次数
+	ProxyURL           string // HTTP 代理地址（例如 http://127.0.0.1:7890）
 }
 
 // LoadConfig 从环境变量加载配置，未设置时使用默认值
@@ -23,6 +25,8 @@ func LoadConfig() *AppConfig {
 		DBPath:             getEnv("DB_PATH", "codeflicke2api.db"),
 		RefreshConcurrency: 10,
 		RefreshRetries:     3,
+		ChatRetries:        3,
+		ProxyURL:           getEnv("PROXY_URL", ""),
 	}
 }
 

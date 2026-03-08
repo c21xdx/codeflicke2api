@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -14,17 +15,41 @@ import (
 // UpstreamClient 封装与 CodeFlicker 上游服务的 HTTP 通信
 type UpstreamClient struct {
 	baseURL    string
+	proxyURL   string
 	httpClient *http.Client
 }
 
-// NewUpstreamClient 创建上游请求客户端
-func NewUpstreamClient(baseURL string) *UpstreamClient {
+// NewUpstreamClient 创建上游请求客户端，支持可选的 HTTP 代理
+func NewUpstreamClient(baseURL, proxyURL string) *UpstreamClient {
+	transport := buildTransport(proxyURL)
 	return &UpstreamClient{
-		baseURL: baseURL,
+		baseURL:  baseURL,
+		proxyURL: proxyURL,
 		httpClient: &http.Client{
-			Timeout: 120 * time.Second,
+			Timeout:   120 * time.Second,
+			Transport: transport,
 		},
 	}
+}
+
+// buildTransport 根据代理地址构建 http.Transport，为空时返回默认 Transport
+func buildTransport(proxyURL string) *http.Transport {
+	if proxyURL == "" {
+		return &http.Transport{}
+	}
+	proxyParsed, err := url.Parse(proxyURL)
+	if err != nil {
+		return &http.Transport{}
+	}
+	return &http.Transport{
+		Proxy: http.ProxyURL(proxyParsed),
+	}
+}
+
+// UpdateProxy 动态更新代理配置
+func (u *UpstreamClient) UpdateProxy(proxyURL string) {
+	u.proxyURL = proxyURL
+	u.httpClient.Transport = buildTransport(proxyURL)
 }
 
 // buildHeaders 构建模拟 CodeFlicker IDE 客户端的请求头
@@ -220,7 +245,7 @@ func (u *UpstreamClient) StreamChatCompletion(account *Account, cfReq *CFChatReq
 	}
 	req.Header.Set("Accept", "text/event-stream")
 
-	client := &http.Client{Timeout: 0}
+	client := &http.Client{Timeout: 0, Transport: buildTransport(u.proxyURL)}
 	return client.Do(req)
 }
 

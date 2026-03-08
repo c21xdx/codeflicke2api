@@ -866,6 +866,11 @@
             <polyline points="1 20 1 14 7 14" />
             <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
         </symbol>
+        <symbol id="icon-globe" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="2" y1="12" x2="22" y2="12" />
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+        </symbol>
     </svg>
 
     <div class="toast-container" id="toastContainer"></div>
@@ -1048,6 +1053,21 @@
                             <p style="font-size:12px;color:var(--text-muted);margin-top:6px">同时更新数据库中对应的 Key 记录</p>
                         </div>
                         <div style="border-top:1px solid var(--border);margin:20px 0;padding-top:20px">
+                            <h4
+                                style="font-size:14px;margin-bottom:16px;color:var(--text-secondary);display:flex;align-items:center;gap:8px">
+                                <svg class="icon-svg" style="width:16px;height:16px">
+                                    <use href="#icon-refresh" />
+                                </svg>
+                                请求重试设置
+                            </h4>
+                            <div class="form-group">
+                                <label>请求重试次数</label>
+                                <input type="number" id="settingChatRetries" min="1" max="10" placeholder="3">
+                                <p style="font-size:12px;color:var(--text-muted);margin-top:6px">
+                                    请求上游 Chat 接口失败时的自动重试次数，每次重试自动切换账号</p>
+                            </div>
+                        </div>
+                        <div style="border-top:1px solid var(--border);margin:20px 0;padding-top:20px">
                             <h4 style="font-size:14px;margin-bottom:16px;color:var(--text-secondary)">Token 刷新设置</h4>
                             <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
                                 <div class="form-group">
@@ -1056,8 +1076,35 @@
                                         placeholder="10">
                                 </div>
                                 <div class="form-group">
-                                    <label>重试次数</label>
+                                    <label>刷新重试次数</label>
                                     <input type="number" id="settingRefreshRetries" min="1" max="10" placeholder="3">
+                                </div>
+                            </div>
+                        </div>
+                        <div style="border-top:1px solid var(--border);margin:20px 0;padding-top:20px">
+                            <h4
+                                style="font-size:14px;margin-bottom:16px;color:var(--text-secondary);display:flex;align-items:center;gap:8px">
+                                <svg class="icon-svg" style="width:16px;height:16px">
+                                    <use href="#icon-globe" />
+                                </svg>
+                                HTTP 代理设置
+                            </h4>
+                            <div class="form-group">
+                                <label>代理地址</label>
+                                <div style="display:flex;gap:8px;align-items:flex-start">
+                                    <input type="text" id="settingProxyURL"
+                                        placeholder="例如：http://127.0.0.1:7890 或 socks5://127.0.0.1:1080" style="flex:1">
+                                    <button class="btn btn-ghost" onclick="testProxy()" id="proxyTestBtn"
+                                        style="white-space:nowrap;height:42px">
+                                        <svg class="icon-svg">
+                                            <use href="#icon-zap" />
+                                        </svg> 测试
+                                    </button>
+                                </div>
+                                <p style="font-size:12px;color:var(--text-muted);margin-top:6px">
+                                    留空表示不使用代理（直连），所有上游请求将通过此代理转发</p>
+                                <div id="proxyTestResult"
+                                    style="display:none;margin-top:8px;padding:10px 14px;border-radius:var(--radius-sm);font-size:13px;border:1px solid var(--border)">
                                 </div>
                             </div>
                         </div>
@@ -1439,22 +1486,28 @@
                 const data = await api('/admin/settings');
                 document.getElementById('settingAdminToken').value = data.admin_token || '';
                 document.getElementById('settingAPIKey').value = data.default_api_key || '';
+                document.getElementById('settingChatRetries').value = data.chat_retries || 3;
                 document.getElementById('settingRefreshConcurrency').value = data.refresh_concurrency || 10;
                 document.getElementById('settingRefreshRetries').value = data.refresh_retries || 3;
+                document.getElementById('settingProxyURL').value = data.proxy_url || '';
+                document.getElementById('proxyTestResult').style.display = 'none';
             } catch (e) { console.error(e); }
         }
 
         async function saveSettings() {
             const newToken = document.getElementById('settingAdminToken').value.trim();
             const newKey = document.getElementById('settingAPIKey').value.trim();
+            const chatRetries = parseInt(document.getElementById('settingChatRetries').value);
             const concurrency = parseInt(document.getElementById('settingRefreshConcurrency').value);
             const retries = parseInt(document.getElementById('settingRefreshRetries').value);
+            const proxyURL = document.getElementById('settingProxyURL').value.trim();
             const body = {};
             if (newToken) body.admin_token = newToken;
             if (newKey) body.default_api_key = newKey;
+            if (chatRetries > 0) body.chat_retries = chatRetries;
             if (concurrency > 0) body.refresh_concurrency = concurrency;
             if (retries > 0) body.refresh_retries = retries;
-            if (Object.keys(body).length === 0) { toast('请填写至少一项', 'error'); return; }
+            body.proxy_url = proxyURL;
             try {
                 const result = await api('/admin/settings', { method: 'PUT', body: JSON.stringify(body) });
                 toast(result.message);
@@ -1463,7 +1516,52 @@
             } catch (e) { toast(e.message, 'error'); }
         }
 
-        // === Token 刷新 ===
+        async function testProxy() {
+            const btn = document.getElementById('proxyTestBtn');
+            const resultEl = document.getElementById('proxyTestResult');
+            const proxyURL = document.getElementById('settingProxyURL').value.trim();
+
+            btn.disabled = true;
+            btn.innerHTML = `${svgIcon('icon-refresh')} 测试中...`;
+            resultEl.style.display = 'block';
+            resultEl.style.borderColor = 'var(--border)';
+            resultEl.style.color = 'var(--text-secondary)';
+            resultEl.innerHTML = '正在测试代理连通性...';
+
+            try {
+                await api('/admin/settings', { method: 'PUT', body: JSON.stringify({ proxy_url: proxyURL }) });
+            } catch (e) {
+                resultEl.style.borderColor = 'var(--danger)';
+                resultEl.style.color = 'var(--danger)';
+                resultEl.innerHTML = `${svgIcon('icon-alert-triangle')} 代理设置保存失败: ${e.message}`;
+                btn.disabled = false;
+                btn.innerHTML = `${svgIcon('icon-zap')} 测试`;
+                return;
+            }
+
+            try {
+                const start = Date.now();
+                const resp = await fetch('/v1/models', { headers: { 'Authorization': 'Bearer ' + (await api('/admin/settings')).default_api_key } });
+                const elapsed = Date.now() - start;
+                if (resp.ok) {
+                    resultEl.style.borderColor = 'var(--success)';
+                    resultEl.style.color = 'var(--success)';
+                    resultEl.innerHTML = `${svgIcon('icon-check-circle')} 连通性测试通过 (${elapsed}ms)${proxyURL ? '' : '（直连模式）'}`;
+                } else {
+                    const data = await resp.json().catch(() => ({}));
+                    resultEl.style.borderColor = 'var(--warning)';
+                    resultEl.style.color = 'var(--warning)';
+                    resultEl.innerHTML = `${svgIcon('icon-alert-triangle')} 上游响应异常 HTTP ${resp.status}: ${data.error || '未知错误'} (${elapsed}ms)`;
+                }
+            } catch (e) {
+                resultEl.style.borderColor = 'var(--danger)';
+                resultEl.style.color = 'var(--danger)';
+                resultEl.innerHTML = `${svgIcon('icon-alert-triangle')} 连接失败: ${e.message}${proxyURL ? '，请检查代理地址是否正确' : ''}`;
+            }
+            btn.disabled = false;
+            btn.innerHTML = `${svgIcon('icon-zap')} 测试`;
+        }
+
         async function refreshAllTokens() {
             const btn = document.getElementById('refreshTokenBtn');
             if (!confirm('确定要刷新所有账号的 JWT Token 吗？\n只有导入时包含 email/password 的账号才能刷新。')) return;
@@ -1473,7 +1571,6 @@
             try {
                 const result = await api('/admin/accounts/refresh', { method: 'POST', body: '{}' });
                 toast(result.message, result.failed > 0 ? 'error' : 'success');
-                // 显示详细结果
                 if (result.results && result.results.length > 0) {
                     const failedResults = result.results.filter(r => !r.success);
                     if (failedResults.length > 0) {
@@ -1489,12 +1586,10 @@
             }
         }
 
-        // === 通用 ===
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
         function copyText(text) { navigator.clipboard.writeText(text).then(() => toast('已复制到剪贴板')); }
         document.querySelectorAll('.modal-overlay').forEach(overlay => { overlay.addEventListener('click', e => { if (e.target === overlay) overlay.classList.remove('active'); }); });
 
-        // === 初始化 ===
         if (adminToken) {
             fetch('/admin/stats', { headers: { 'X-Admin-Token': adminToken } })
                 .then(r => { if (r.ok) showApp(); else logout(); }).catch(() => logout());
