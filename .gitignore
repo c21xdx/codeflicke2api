@@ -27,3 +27,4 @@ logs/
 dist/
 build/
 node_modules/
+accounts-test.json
