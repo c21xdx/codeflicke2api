@@ -969,109 +969,135 @@
                     </div>
                 </div>
 
-                <!-- 账号管理 -->
-                <div class="page" id="page-accounts">
-                    <div class="page-header">
-                        <div>
-                            <h2>账号管理</h2>
-                            <p>管理 CodeFlicker 上游账号</p>
-                        </div>
-                        <div class="actions">
-                            <button class="btn btn-ghost" onclick="showBatchImportModal()">
-                                <svg class="icon-svg">
-                                    <use href="#icon-upload" />
-                                </svg> 批量导入
-                            </button>
-                            <button class="btn btn-success" onclick="showAddAccountModal()">
-                                <svg class="icon-svg">
-                                    <use href="#icon-plus" />
-                                </svg> 添加账号
-                            </button>
-                            <button class="btn btn-ghost" id="refreshTokenBtn" onclick="refreshAllTokens()"
-                                style="border-color:var(--warning);color:var(--warning)">
-                                <svg class="icon-svg">
-                                    <use href="#icon-refresh" />
-                                </svg> 一键刷新 Token
-                            </button>
-                        </div>
+                <div class="card">
+                    <div class="card-header">
+                        <h3>使用说明</h3>
                     </div>
-                    <div class="card">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>ID</th>
-                                    <th>备注</th>
-                                    <th>User ID</th>
-                                    <th>JWT Token</th>
-                                    <th>过期剩余</th>
-                                    <th>状态</th>
-                                    <th>启用</th>
-                                    <th>上次使用</th>
-                                    <th>操作</th>
-                                </tr>
-                            </thead>
-                            <tbody id="accountsTable">
-                                <tr>
-                                    <td colspan="9">
-                                        <div class="empty-state"><svg class="icon-svg icon-svg-xl">
-                                                <use href="#icon-users" />
-                                            </svg>
-                                            <p>暂无账号，请点击上方按钮添加</p>
-                                        </div>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
+                    <div style="padding: 24px; color: var(--text-secondary); font-size: 14px; line-height: 1.8;">
+                        <p><strong>1. 添加账号</strong>：在「账号管理」中添加 CodeFlicker 账号的 JWT Token（userId 将自动从 JWT 解码获取）。</p>
+                        <p><strong>2. 批量导入</strong>：支持 JSON 粘贴和 JSON 文件上传批量导入账号。</p>
+                        <p><strong>3. API 调用</strong>：使用 OpenAI 兼容格式调用接口：</p>
+                        <pre
+                            style="background: var(--bg-input); padding: 16px; border-radius: 8px; margin: 12px 0; overflow-x: auto; font-size: 12px; color: var(--accent);">
+# 获取模型列表
+curl http://localhost:8080/v1/models \
+  -H "Authorization: Bearer sk-123456"
+
+# 聊天补全 (流式)
+curl http://localhost:8080/v1/chat/completions \
+  -H "Authorization: Bearer sk-123456" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "GLM_4_7_TOC",
+    "messages": [{"role": "user", "content": "Hello"}],
+    "stream": true
+  }'</pre>
+                        <p><strong>4. 多账号轮询</strong>：系统会自动在所有活跃账号间轮询分配请求。</p>
                     </div>
                 </div>
+            </div>
 
-
-                <!-- 设置 -->
-                <div class="page" id="page-settings">
-                    <div class="page-header">
-                        <div>
-                            <h2>系统设置</h2>
-                            <p>修改管理 Token 和默认 API Key</p>
-                        </div>
+            <!-- 账号管理 -->
+            <div class="page" id="page-accounts">
+                <div class="page-header">
+                    <div>
+                        <h2>账号管理</h2>
+                        <p>管理 CodeFlicker 上游账号</p>
                     </div>
-                    <div class="card" style="max-width:600px">
-                        <div style="padding:24px">
-                            <div class="form-group">
-                                <label>管理面板 Token</label>
-                                <input type="text" id="settingAdminToken" placeholder="输入新的管理 Token">
-                                <p style="font-size:12px;color:var(--text-muted);margin-top:6px">修改后需使用新 Token 重新登录</p>
-                            </div>
-                            <div class="form-group">
-                                <label>默认 API Key</label>
-                                <input type="text" id="settingAPIKey" placeholder="输入新的 API Key，例如 sk-xxx">
-                                <p style="font-size:12px;color:var(--text-muted);margin-top:6px">同时更新数据库中对应的 Key 记录</p>
-                            </div>
-                            <div style="border-top:1px solid var(--border);margin:20px 0;padding-top:20px">
-                                <h4 style="font-size:14px;margin-bottom:16px;color:var(--text-secondary)">Token 刷新设置
-                                </h4>
-                                <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-                                    <div class="form-group">
-                                        <label>刷新并发数</label>
-                                        <input type="number" id="settingRefreshConcurrency" min="1" max="50"
-                                            placeholder="10">
+                    <div class="actions">
+                        <button class="btn btn-ghost" onclick="showBatchImportModal()">
+                            <svg class="icon-svg">
+                                <use href="#icon-upload" />
+                            </svg> 批量导入
+                        </button>
+                        <button class="btn btn-success" onclick="showAddAccountModal()">
+                            <svg class="icon-svg">
+                                <use href="#icon-plus" />
+                            </svg> 添加账号
+                        </button>
+                        <button class="btn btn-ghost" id="refreshTokenBtn" onclick="refreshAllTokens()"
+                            style="border-color:var(--warning);color:var(--warning)">
+                            <svg class="icon-svg">
+                                <use href="#icon-refresh" />
+                            </svg> 一键刷新 Token
+                        </button>
+                    </div>
+                </div>
+                <div class="card">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>备注</th>
+                                <th>User ID</th>
+                                <th>JWT Token</th>
+                                <th>过期剩余</th>
+                                <th>状态</th>
+                                <th>启用</th>
+                                <th>上次使用</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="accountsTable">
+                            <tr>
+                                <td colspan="9">
+                                    <div class="empty-state"><svg class="icon-svg icon-svg-xl">
+                                            <use href="#icon-users" />
+                                        </svg>
+                                        <p>暂无账号，请点击上方按钮添加</p>
                                     </div>
-                                    <div class="form-group">
-                                        <label>重试次数</label>
-                                        <input type="number" id="settingRefreshRetries" min="1" max="10"
-                                            placeholder="3">
-                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+
+            <!-- 设置 -->
+            <div class="page" id="page-settings">
+                <div class="page-header">
+                    <div>
+                        <h2>系统设置</h2>
+                        <p>修改管理 Token 和默认 API Key</p>
+                    </div>
+                </div>
+                <div class="card" style="max-width:600px">
+                    <div style="padding:24px">
+                        <div class="form-group">
+                            <label>管理面板 Token</label>
+                            <input type="text" id="settingAdminToken" placeholder="输入新的管理 Token">
+                            <p style="font-size:12px;color:var(--text-muted);margin-top:6px">修改后需使用新 Token 重新登录</p>
+                        </div>
+                        <div class="form-group">
+                            <label>默认 API Key</label>
+                            <input type="text" id="settingAPIKey" placeholder="输入新的 API Key，例如 sk-xxx">
+                            <p style="font-size:12px;color:var(--text-muted);margin-top:6px">同时更新数据库中对应的 Key 记录</p>
+                        </div>
+                        <div style="border-top:1px solid var(--border);margin:20px 0;padding-top:20px">
+                            <h4 style="font-size:14px;margin-bottom:16px;color:var(--text-secondary)">Token 刷新设置</h4>
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+                                <div class="form-group">
+                                    <label>刷新并发数</label>
+                                    <input type="number" id="settingRefreshConcurrency" min="1" max="50"
+                                        placeholder="10">
+                                </div>
+                                <div class="form-group">
+                                    <label>重试次数</label>
+                                    <input type="number" id="settingRefreshRetries" min="1" max="10" placeholder="3">
                                 </div>
                             </div>
-                            <button class="btn btn-success" onclick="saveSettings()" style="width:100%">
-                                <svg class="icon-svg">
-                                    <use href="#icon-check-circle" />
-                                </svg> 保存设置
-                            </button>
                         </div>
+                        <button class="btn btn-success" onclick="saveSettings()" style="width:100%">
+                            <svg class="icon-svg">
+                                <use href="#icon-check-circle" />
+                            </svg> 保存设置
+                        </button>
                     </div>
                 </div>
             </div>
         </div>
+    </div>
     </div>
 
     <!-- 添加账号模态框 -->
