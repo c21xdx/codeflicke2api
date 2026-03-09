@@ -39,6 +39,16 @@ type SystemSetting struct {
 	Value string `json:"value"`
 }
 
+// UsageLog API 调用用量记录
+type UsageLog struct {
+	ID           uint      `gorm:"primaryKey" json:"id"`
+	InputTokens  int       `json:"input_tokens"`  // 输入 Token 数
+	OutputTokens int       `json:"output_tokens"` // 输出 Token 数
+	Model        string    `json:"model"`         // 使用的模型
+	APIType      string    `json:"api_type"`      // 接口类型: openai / anthropic
+	CreatedAt    time.Time `json:"created_at"`
+}
+
 // InitDB 初始化 SQLite 连接并执行表结构自动迁移
 func InitDB(dbPath string) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
@@ -46,7 +56,7 @@ func InitDB(dbPath string) *gorm.DB {
 		log.Fatalf("数据库连接失败: %v", err)
 	}
 
-	if err := db.AutoMigrate(&Account{}, &APIKey{}, &SystemSetting{}); err != nil {
+	if err := db.AutoMigrate(&Account{}, &APIKey{}, &SystemSetting{}, &UsageLog{}); err != nil {
 		log.Fatalf("数据库迁移失败: %v", err)
 	}
 

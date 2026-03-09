@@ -345,7 +345,7 @@
         /* 统计卡片 */
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            grid-template-columns: repeat(3, 1fr);
             gap: 16px;
             margin-bottom: 28px;
         }
@@ -966,11 +966,27 @@
                         <div class="stat-label">异常账号</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-icon key"><svg class="icon-svg icon-svg-xl">
-                                <use href="#icon-key" />
+                        <div class="stat-icon" style="color:#3b82f6"><svg class="icon-svg icon-svg-xl"
+                                viewBox="0 0 24 24">
+                                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
                             </svg></div>
-                        <div class="stat-value" id="statActiveKeys">-</div>
-                        <div class="stat-label">活跃 Key</div>
+                        <div class="stat-value" id="statInputTokens">-</div>
+                        <div class="stat-label">输入 Token 总数</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon" style="color:#8b5cf6"><svg class="icon-svg icon-svg-xl"
+                                viewBox="0 0 24 24">
+                                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                            </svg></div>
+                        <div class="stat-value" id="statOutputTokens">-</div>
+                        <div class="stat-label">输出 Token 总数</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon" style="color:#06b6d4"><svg class="icon-svg icon-svg-xl">
+                                <use href="#icon-zap" />
+                            </svg></div>
+                        <div class="stat-value" id="statTotalRequests">-</div>
+                        <div class="stat-label">总调用次数</div>
                     </div>
                 </div>
             </div>
@@ -1259,13 +1275,22 @@
         }
 
         // === 统计 ===
+        function formatNumber(num) {
+            if (num >= 1000000000) return (num / 1000000000).toFixed(1) + 'B';
+            if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+            if (num >= 10000) return (num / 1000).toFixed(1) + 'K';
+            return num.toLocaleString();
+        }
+
         async function loadStats() {
             try {
                 const data = await api('/admin/stats');
                 document.getElementById('statTotalAccounts').textContent = data.total_accounts;
                 document.getElementById('statActiveAccounts').textContent = data.active_accounts;
                 document.getElementById('statErrorAccounts').textContent = data.error_accounts;
-                document.getElementById('statActiveKeys').textContent = data.active_keys;
+                document.getElementById('statInputTokens').textContent = formatNumber(data.total_input_tokens || 0);
+                document.getElementById('statOutputTokens').textContent = formatNumber(data.total_output_tokens || 0);
+                document.getElementById('statTotalRequests').textContent = formatNumber(data.total_requests || 0);
             } catch (e) { console.error(e); }
         }
 

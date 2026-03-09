@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 // OAIChatRequest OpenAI 格式的聊天补全请求
@@ -92,11 +93,12 @@ type OpenAIHandler struct {
 	pool     *AccountPool
 	upstream *UpstreamClient
 	cfg      *AppConfig
+	db       *gorm.DB
 }
 
 // NewOpenAIHandler 创建 OpenAI 兼容处理器
-func NewOpenAIHandler(pool *AccountPool, upstream *UpstreamClient, cfg *AppConfig) *OpenAIHandler {
-	return &OpenAIHandler{pool: pool, upstream: upstream, cfg: cfg}
+func NewOpenAIHandler(pool *AccountPool, upstream *UpstreamClient, cfg *AppConfig, db *gorm.DB) *OpenAIHandler {
+	return &OpenAIHandler{pool: pool, upstream: upstream, cfg: cfg, db: db}
 }
 
 // modelNameMapping 上游模型标识 → 用户友好名称
@@ -286,6 +288,8 @@ func (h *OpenAIHandler) handleStreamResponse(c *gin.Context, body io.Reader, mod
 	scanner := bufio.NewScanner(body)
 	scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
 
+	var streamInputTokens, streamOutputTokens int
+
 	for scanner.Scan() {
 		line := scanner.Text()
 		if line == "" || strings.HasPrefix(line, ":") || !strings.HasPrefix(line, "data:") {
@@ -323,6 +327,10 @@ func (h *OpenAIHandler) handleStreamResponse(c *gin.Context, body io.Reader, mod
 			if err := json.Unmarshal(event.Data, &chatData); err != nil {
 				continue
 			}
+			if chatData.Usage != nil {
+				streamInputTokens = chatData.Usage.PromptTokens
+				streamOutputTokens = chatData.Usage.CompletionTokens
+			}
 			for _, choice := range chatData.Choices {
 				chunk := OAIStreamChunk{
 					ID: respID, Object: "chat.completion.chunk", Created: created, Model: model,
@@ -343,6 +351,20 @@ func (h *OpenAIHandler) handleStreamResponse(c *gin.Context, body io.Reader, mod
 done:
 	fmt.Fprintf(c.Writer, "data: [DONE]\n\n")
 	flusher.Flush()
+	h.recordUsage(model, streamInputTokens, streamOutputTokens)
+}
+
+// recordUsage 记录本次请求的 token 用量
+func (h *OpenAIHandler) recordUsage(model string, inputTokens, outputTokens int) {
+	if inputTokens == 0 && outputTokens == 0 {
+		return
+	}
+	h.db.Create(&UsageLog{
+		InputTokens:  inputTokens,
+		OutputTokens: outputTokens,
+		Model:        model,
+		APIType:      "openai",
+	})
 }
 
 // handleNonStreamResponse 累积上游 SSE 流全部数据，组装为 OpenAI 非流式响应返回
@@ -405,6 +427,11 @@ func (h *OpenAIHandler) handleNonStreamResponse(c *gin.Context, body io.Reader, 
 	if len(lastToolCalls) > 0 {
 		finishReason = "tool_calls"
 	}
+	// 记录用量
+	if usage != nil {
+		h.recordUsage(model, usage.PromptTokens, usage.CompletionTokens)
+	}
+
 	c.JSON(http.StatusOK, OAIChatResponse{
 		ID: respID, Object: "chat.completion", Created: created, Model: model,
 		Choices: []OAIChoice{{Index: 0,

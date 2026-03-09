@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 type AnthropicRequest struct {
@@ -103,11 +104,12 @@ type AnthropicHandler struct {
 	pool     *AccountPool
 	upstream *UpstreamClient
 	cfg      *AppConfig
+	db       *gorm.DB
 }
 
 // NewAnthropicHandler 创建 Anthropic 兼容处理器
-func NewAnthropicHandler(pool *AccountPool, upstream *UpstreamClient, cfg *AppConfig) *AnthropicHandler {
-	return &AnthropicHandler{pool: pool, upstream: upstream, cfg: cfg}
+func NewAnthropicHandler(pool *AccountPool, upstream *UpstreamClient, cfg *AppConfig, db *gorm.DB) *AnthropicHandler {
+	return &AnthropicHandler{pool: pool, upstream: upstream, cfg: cfg, db: db}
 }
 
 // HandleMessages 处理 Anthropic Messages API 请求，转换格式并代理到上游
@@ -431,6 +433,9 @@ done:
 		Type: "message_stop",
 	})
 	flusher.Flush()
+
+	// 记录流式请求的用量
+	h.recordAnthropicUsage(model, totalInputTokens, totalOutputTokens)
 }
 
 // handleAnthropicNonStreamResponse 累积上游 SSE 流全部数据，组装为 Anthropic 非流式响应返回
@@ -527,6 +532,9 @@ func (h *AnthropicHandler) handleAnthropicNonStreamResponse(c *gin.Context, body
 		stopReason = "tool_use"
 	}
 
+	// 记录用量
+	h.recordAnthropicUsage(model, usage.InputTokens, usage.OutputTokens)
+
 	c.JSON(http.StatusOK, AnthropicResponse{
 		ID:         respID,
 		Type:       "message",
@@ -535,6 +543,19 @@ func (h *AnthropicHandler) handleAnthropicNonStreamResponse(c *gin.Context, body
 		Model:      model,
 		StopReason: &stopReason,
 		Usage:      usage,
+	})
+}
+
+// recordAnthropicUsage 记录本次请求的 token 用量
+func (h *AnthropicHandler) recordAnthropicUsage(model string, inputTokens, outputTokens int) {
+	if inputTokens == 0 && outputTokens == 0 {
+		return
+	}
+	h.db.Create(&UsageLog{
+		InputTokens:  inputTokens,
+		OutputTokens: outputTokens,
+		Model:        model,
+		APIType:      "anthropic",
 	})
 }
 

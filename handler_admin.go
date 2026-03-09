@@ -228,12 +228,22 @@ func (h *AdminHandler) HandleStats(c *gin.Context) {
 		activeAccounts = 0
 	}
 
+	// 汇总 token 用量和调用次数
+	var totalInputTokens, totalOutputTokens int64
+	var totalRequests int64
+	h.db.Model(&UsageLog{}).Select("COALESCE(SUM(input_tokens), 0)").Scan(&totalInputTokens)
+	h.db.Model(&UsageLog{}).Select("COALESCE(SUM(output_tokens), 0)").Scan(&totalOutputTokens)
+	h.db.Model(&UsageLog{}).Count(&totalRequests)
+
 	c.JSON(http.StatusOK, gin.H{
-		"total_accounts":  totalAccounts,
-		"active_accounts": activeAccounts,
-		"error_accounts":  errorAccounts,
-		"total_keys":      totalKeys,
-		"active_keys":     activeKeys,
+		"total_accounts":      totalAccounts,
+		"active_accounts":     activeAccounts,
+		"error_accounts":      errorAccounts,
+		"total_keys":          totalKeys,
+		"active_keys":         activeKeys,
+		"total_input_tokens":  totalInputTokens,
+		"total_output_tokens": totalOutputTokens,
+		"total_requests":      totalRequests,
 	})
 }
 

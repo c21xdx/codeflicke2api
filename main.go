@@ -20,8 +20,8 @@ func main() {
 
 	pool := NewAccountPool(db)
 	upstream := NewUpstreamClient(cfg.CodeFlickerBaseURL, cfg.ProxyURL)
-	oaiHandler := NewOpenAIHandler(pool, upstream, cfg)
-	anthropicHandler := NewAnthropicHandler(pool, upstream, cfg)
+	oaiHandler := NewOpenAIHandler(pool, upstream, cfg, db)
+	anthropicHandler := NewAnthropicHandler(pool, upstream, cfg, db)
 	adminHandler := NewAdminHandler(db, cfg, upstream)
 
 	r := gin.Default()
