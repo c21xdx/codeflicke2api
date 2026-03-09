@@ -8,29 +8,42 @@ import (
 	"gorm.io/gorm"
 )
 
-// APIKeyAuth 验证请求中的 Bearer API Key 是否有效且已启用
+// APIKeyAuth 验证请求中的 API Key 是否有效且已启用。
+// 支持两种认证方式：
+//   - OpenAI 风格: Authorization: Bearer sk-xxx
+//   - Anthropic 风格: x-api-key: sk-xxx
 func APIKeyAuth(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		var key string
+
+		// 优先从 Authorization 头提取 Bearer Token
 		auth := c.GetHeader("Authorization")
-		if auth == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": gin.H{
-					"message": "缺少 Authorization 头",
-					"type":    "invalid_request_error",
-					"code":    "missing_api_key",
-				},
-			})
-			c.Abort()
-			return
+		if auth != "" {
+			key = strings.TrimPrefix(auth, "Bearer ")
+			if key == auth {
+				c.JSON(http.StatusUnauthorized, gin.H{
+					"error": gin.H{
+						"message": "Authorization 格式错误，应为 Bearer sk-xxx",
+						"type":    "invalid_request_error",
+						"code":    "invalid_api_key",
+					},
+				})
+				c.Abort()
+				return
+			}
 		}
 
-		key := strings.TrimPrefix(auth, "Bearer ")
-		if key == auth {
+		// 回退到 x-api-key 头
+		if key == "" {
+			key = c.GetHeader("x-api-key")
+		}
+
+		if key == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"error": gin.H{
-					"message": "Authorization 格式错误，应为 Bearer sk-xxx",
+					"message": "缺少 API Key（请通过 Authorization 或 x-api-key 头提供）",
 					"type":    "invalid_request_error",
-					"code":    "invalid_api_key",
+					"code":    "missing_api_key",
 				},
 			})
 			c.Abort()
@@ -54,8 +67,6 @@ func APIKeyAuth(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
-// AdminAuth 管理面板鉴权中间件，支持从 Header 或 Query 参数获取 Token。
-// 使用 cfg 指针以支持运行时动态更新 Token。
 func AdminAuth(cfg *AppConfig) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token := c.GetHeader("X-Admin-Token")

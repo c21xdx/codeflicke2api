@@ -21,6 +21,7 @@ func main() {
 	pool := NewAccountPool(db)
 	upstream := NewUpstreamClient(cfg.CodeFlickerBaseURL, cfg.ProxyURL)
 	oaiHandler := NewOpenAIHandler(pool, upstream, cfg)
+	anthropicHandler := NewAnthropicHandler(pool, upstream, cfg)
 	adminHandler := NewAdminHandler(db, cfg, upstream)
 
 	r := gin.Default()
@@ -29,7 +30,7 @@ func main() {
 	r.Use(func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Admin-Token")
+		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Admin-Token, X-API-Key, Anthropic-Version")
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(http.StatusNoContent)
 			return
@@ -37,11 +38,12 @@ func main() {
 		c.Next()
 	})
 
-	// OpenAI 兼容端点
+	// OpenAI 兼容端点和 messages 兼容端点
 	v1 := r.Group("/v1", APIKeyAuth(db))
 	{
 		v1.GET("/models", oaiHandler.HandleModels)
 		v1.POST("/chat/completions", oaiHandler.HandleChatCompletions)
+		v1.POST("/messages", anthropicHandler.HandleMessages)
 	}
 
 	// 管理面板 API
