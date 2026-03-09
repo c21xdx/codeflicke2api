@@ -201,16 +201,32 @@ func (h *AdminHandler) HandleToggleKey(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "切换成功", "data": key})
 }
 
-// HandleStats 获取系统统计概览
 func (h *AdminHandler) HandleStats(c *gin.Context) {
-	var totalAccounts, activeAccounts, errorAccounts int64
+	var totalAccounts, activeAccounts, statusErrorAccounts int64
 	var totalKeys, activeKeys int64
 
 	h.db.Model(&Account{}).Count(&totalAccounts)
 	h.db.Model(&Account{}).Where("is_active = ? AND status = ?", true, "normal").Count(&activeAccounts)
-	h.db.Model(&Account{}).Where("status IN ?", []string{"error", "rate_limited"}).Count(&errorAccounts)
+	h.db.Model(&Account{}).Where("status IN ?", []string{"error", "rate_limited"}).Count(&statusErrorAccounts)
 	h.db.Model(&APIKey{}).Count(&totalKeys)
 	h.db.Model(&APIKey{}).Where("is_active = ?", true).Count(&activeKeys)
+
+	var normalAccounts []Account
+	h.db.Where("status = ?", "normal").Select("id", "jwt_token").Find(&normalAccounts)
+	var expiredCount int64
+	now := time.Now().Unix()
+	for _, acc := range normalAccounts {
+		exp := extractExpFromJWT(acc.JWTToken)
+		if exp > 0 && exp <= now {
+			expiredCount++
+		}
+	}
+
+	errorAccounts := statusErrorAccounts + expiredCount
+	activeAccounts -= expiredCount
+	if activeAccounts < 0 {
+		activeAccounts = 0
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"total_accounts":  totalAccounts,
@@ -351,6 +367,38 @@ func extractUserIDFromJWT(token string) (string, error) {
 	}
 
 	return claims.UserID, nil
+}
+
+func extractExpFromJWT(token string) int64 {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return 0
+	}
+
+	payload := parts[1]
+	switch len(payload) % 4 {
+	case 2:
+		payload += "=="
+	case 3:
+		payload += "="
+	}
+
+	decoded, err := base64.URLEncoding.DecodeString(payload)
+	if err != nil {
+		return 0
+	}
+
+	var claims struct {
+		Exp json.Number `json:"exp"`
+	}
+	if err := json.Unmarshal(decoded, &claims); err != nil {
+		return 0
+	}
+	exp, err := claims.Exp.Int64()
+	if err != nil {
+		return 0
+	}
+	return exp
 }
 
 // HandleGetSettings 获取当前系统设置
