@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -31,8 +32,9 @@ type AnthropicRequest struct {
 }
 
 type AnthropicMessage struct {
-	Role    string          `json:"role"`
-	Content json.RawMessage `json:"content"`
+	Role       string          `json:"role"`
+	Content    json.RawMessage `json:"content"`
+	ToolCallID string          `json:"tool_call_id,omitempty"`
 }
 
 type AnthropicContentBlock struct {
@@ -41,7 +43,6 @@ type AnthropicContentBlock struct {
 	ID    string          `json:"id,omitempty"`
 	Name  string          `json:"name,omitempty"`
 	Input json.RawMessage `json:"input,omitempty"`
-
 
 	ToolUseID string          `json:"tool_use_id,omitempty"`
 	Content   json.RawMessage `json:"content,omitempty"`
@@ -107,7 +108,7 @@ func (h *AnthropicHandler) HandleMessages(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, AnthropicErrorResponse{
 			Type:  "error",
-			Error: AnthropicError{Type: "invalid_request_error", Message: fmt.Sprintf("请求格式错误: %v", err)},
+			Error: AnthropicError{Type: "invalid_request_error", Message: fmt.Sprintf("invalid request body: %v", err)},
 		})
 		return
 	}
@@ -138,7 +139,7 @@ func (h *AnthropicHandler) HandleMessages(c *gin.Context) {
 		if err != nil {
 			c.JSON(http.StatusServiceUnavailable, AnthropicErrorResponse{
 				Type:  "error",
-				Error: AnthropicError{Type: "api_error", Message: "没有可用的账号"},
+				Error: AnthropicError{Type: "api_error", Message: "no available account"},
 			})
 			return
 		}
@@ -151,21 +152,23 @@ func (h *AnthropicHandler) HandleMessages(c *gin.Context) {
 			Tools:     cfTools,
 			Model:     upstreamModel,
 			DeviceInfo: CFDeviceInfo{
-				Platform: "codeflicker-ide", IDEVersion: "1.101.2", PluginVersion: "9.6.2511250",
+				Platform:      "codeflicker-ide",
+				IDEVersion:    "1.101.2",
+				PluginVersion: "9.6.2511250",
 			},
 		}
 
 		resp, err := h.upstream.StreamChatCompletion(account, cfReq)
 		if err != nil {
 			lastErr = err
-			log.Printf("上游请求失败 (第 %d/%d 次): %v", attempt, maxRetries, err)
+			log.Printf("upstream request failed (%d/%d): %v", attempt, maxRetries, err)
 			if attempt < maxRetries {
 				time.Sleep(time.Duration(attempt) * time.Second)
 				continue
 			}
 			c.JSON(http.StatusBadGateway, AnthropicErrorResponse{
 				Type:  "error",
-				Error: AnthropicError{Type: "api_error", Message: fmt.Sprintf("上游请求失败（已重试 %d 次）: %v", maxRetries, lastErr)},
+				Error: AnthropicError{Type: "api_error", Message: fmt.Sprintf("upstream request failed after %d retries: %v", maxRetries, lastErr)},
 			})
 			return
 		}
@@ -176,32 +179,31 @@ func (h *AnthropicHandler) HandleMessages(c *gin.Context) {
 			lastStatusCode = resp.StatusCode
 			lastBody = string(bodyBytes)
 
-			if resp.StatusCode == 403 {
+			if resp.StatusCode == http.StatusForbidden {
 				h.pool.MarkAccountStatus(account.ID, "error")
 			}
-			if resp.StatusCode == 413 {
+			if resp.StatusCode == http.StatusRequestEntityTooLarge {
 				c.JSON(http.StatusRequestEntityTooLarge, AnthropicErrorResponse{
 					Type:  "error",
-					Error: AnthropicError{Type: "invalid_request_error", Message: "超过最大 token 限制"},
+					Error: AnthropicError{Type: "invalid_request_error", Message: "max token limit exceeded"},
 				})
 				return
 			}
 
-			log.Printf("上游返回 HTTP %d (第 %d/%d 次): %s", resp.StatusCode, attempt, maxRetries, lastBody)
+			log.Printf("upstream returned HTTP %d (%d/%d): %s", resp.StatusCode, attempt, maxRetries, lastBody)
 			if attempt < maxRetries {
 				time.Sleep(time.Duration(attempt) * time.Second)
 				continue
 			}
 			c.JSON(lastStatusCode, AnthropicErrorResponse{
 				Type:  "error",
-				Error: AnthropicError{Type: "api_error", Message: fmt.Sprintf("上游返回错误（已重试 %d 次）: %s", maxRetries, lastBody)},
+				Error: AnthropicError{Type: "api_error", Message: fmt.Sprintf("upstream returned error after %d retries: %s", maxRetries, lastBody)},
 			})
 			return
 		}
 
-
 		if attempt > 1 {
-			log.Printf("上游请求在第 %d 次重试后成功", attempt)
+			log.Printf("upstream request succeeded after retry %d", attempt)
 		}
 
 		isStream := req.Stream != nil && *req.Stream
@@ -224,14 +226,12 @@ func (h *AnthropicHandler) handleAnthropicStreamResponse(c *gin.Context, body io
 	if !ok {
 		c.JSON(http.StatusInternalServerError, AnthropicErrorResponse{
 			Type:  "error",
-			Error: AnthropicError{Type: "api_error", Message: "流式传输不支持"},
+			Error: AnthropicError{Type: "api_error", Message: "streaming not supported"},
 		})
 		return
 	}
 
 	respID := "msg_" + uuid.New().String()[:24]
-
-
 	msgStartResp := &AnthropicResponse{
 		ID:      respID,
 		Type:    "message",
@@ -246,21 +246,79 @@ func (h *AnthropicHandler) handleAnthropicStreamResponse(c *gin.Context, body io
 	})
 	flusher.Flush()
 
-
-	contentBlockIdx := 0
-	writeAnthropicSSE(c.Writer, "content_block_start", AnthropicStreamEvent{
-		Type:         "content_block_start",
-		Index:        intPtr(contentBlockIdx),
-		ContentBlock: &AnthropicContentBlock{Type: "text", Text: ""},
-	})
-	flusher.Flush()
-
 	scanner := bufio.NewScanner(body)
 	scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
 
 	var totalOutputTokens int
 	var totalInputTokens int
 	hasToolCall := false
+	nextBlockIndex := 0
+	currentTextBlockIndex := -1
+	pendingToolCalls := map[int]*OAIStreamToolCall{}
+	emittedToolArgs := map[int]string{}
+
+	startTextBlock := func() {
+		if currentTextBlockIndex >= 0 {
+			return
+		}
+		idx := nextBlockIndex
+		nextBlockIndex++
+		currentTextBlockIndex = idx
+		writeAnthropicSSE(c.Writer, "content_block_start", AnthropicStreamEvent{
+			Type:         "content_block_start",
+			Index:        intPtr(idx),
+			ContentBlock: &AnthropicContentBlock{Type: "text", Text: ""},
+		})
+		flusher.Flush()
+	}
+	stopTextBlock := func() {
+		if currentTextBlockIndex < 0 {
+			return
+		}
+		idx := currentTextBlockIndex
+		writeAnthropicSSE(c.Writer, "content_block_stop", AnthropicStreamEvent{
+			Type:  "content_block_stop",
+			Index: intPtr(idx),
+		})
+		flusher.Flush()
+		currentTextBlockIndex = -1
+	}
+	emitToolUse := func(tc OAIStreamToolCall) {
+		stopTextBlock()
+
+		idx := nextBlockIndex
+		nextBlockIndex++
+		writeAnthropicSSE(c.Writer, "content_block_start", AnthropicStreamEvent{
+			Type:  "content_block_start",
+			Index: intPtr(idx),
+			ContentBlock: &AnthropicContentBlock{
+				Type:  "tool_use",
+				ID:    tc.ID,
+				Name:  tc.Function.Name,
+				Input: json.RawMessage("{}"),
+			},
+		})
+		flusher.Flush()
+
+		if args := strings.TrimSpace(tc.Function.Arguments); args != "" {
+			writeAnthropicSSE(c.Writer, "content_block_delta", AnthropicStreamEvent{
+				Type:  "content_block_delta",
+				Index: intPtr(idx),
+				Delta: &AnthropicDelta{
+					Type:        "input_json_delta",
+					PartialJSON: args,
+				},
+			})
+			flusher.Flush()
+		}
+
+		writeAnthropicSSE(c.Writer, "content_block_stop", AnthropicStreamEvent{
+			Type:  "content_block_stop",
+			Index: intPtr(idx),
+		})
+		flusher.Flush()
+		hasToolCall = true
+	}
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -281,22 +339,12 @@ func (h *AnthropicHandler) handleAnthropicStreamResponse(c *gin.Context, body io
 		switch event.Type {
 		case "error":
 			h.markAnthropicAccountByError(event, account)
-			writeAnthropicSSE(c.Writer, "content_block_stop", AnthropicStreamEvent{
-				Type:  "content_block_stop",
-				Index: intPtr(contentBlockIdx),
-			})
-			flusher.Flush()
-			contentBlockIdx++
-			writeAnthropicSSE(c.Writer, "content_block_start", AnthropicStreamEvent{
-				Type:         "content_block_start",
-				Index:        intPtr(contentBlockIdx),
-				ContentBlock: &AnthropicContentBlock{Type: "text", Text: ""},
-			})
-			flusher.Flush()
-			errText := fmt.Sprintf("[错误] %s (code: %d)", event.Tip, event.Code)
+			stopTextBlock()
+			startTextBlock()
+			errText := fmt.Sprintf("[error] %s (code: %d)", event.Tip, event.Code)
 			writeAnthropicSSE(c.Writer, "content_block_delta", AnthropicStreamEvent{
 				Type:  "content_block_delta",
-				Index: intPtr(contentBlockIdx),
+				Index: intPtr(currentTextBlockIndex),
 				Delta: &AnthropicDelta{Type: "text_delta", Text: errText},
 			})
 			flusher.Flush()
@@ -311,92 +359,40 @@ func (h *AnthropicHandler) handleAnthropicStreamResponse(c *gin.Context, body io
 				continue
 			}
 
-
 			if chatData.Usage != nil {
 				totalInputTokens = chatData.Usage.PromptTokens
 				totalOutputTokens = chatData.Usage.CompletionTokens
 			}
 
 			for _, choice := range chatData.Choices {
-
 				if choice.Message.Content != "" {
+					startTextBlock()
 					writeAnthropicSSE(c.Writer, "content_block_delta", AnthropicStreamEvent{
 						Type:  "content_block_delta",
-						Index: intPtr(contentBlockIdx),
+						Index: intPtr(currentTextBlockIndex),
 						Delta: &AnthropicDelta{Type: "text_delta", Text: choice.Message.Content},
 					})
 					flusher.Flush()
 				}
 
-
 				if len(choice.Message.ToolCalls) > 0 {
-					hasToolCall = true
-
-					writeAnthropicSSE(c.Writer, "content_block_stop", AnthropicStreamEvent{
-						Type:  "content_block_stop",
-						Index: intPtr(contentBlockIdx),
-					})
-					flusher.Flush()
-
-
-					var toolCalls []OAIToolCall
-					if err := json.Unmarshal(choice.Message.ToolCalls, &toolCalls); err == nil {
-						for _, tc := range toolCalls {
-							contentBlockIdx++
-
-							writeAnthropicSSE(c.Writer, "content_block_start", AnthropicStreamEvent{
-								Type:  "content_block_start",
-								Index: intPtr(contentBlockIdx),
-								ContentBlock: &AnthropicContentBlock{
-									Type:  "tool_use",
-									ID:    tc.ID,
-									Name:  tc.Function.Name,
-									Input: json.RawMessage("{}"),
-								},
-							})
-							flusher.Flush()
-
-
-							if len(tc.Function.Arguments) > 0 {
-								writeAnthropicSSE(c.Writer, "content_block_delta", AnthropicStreamEvent{
-									Type:  "content_block_delta",
-									Index: intPtr(contentBlockIdx),
-									Delta: &AnthropicDelta{
-										Type:        "input_json_delta",
-										PartialJSON: tc.Function.Arguments,
-									},
-								})
-								flusher.Flush()
-							}
-
-
-							writeAnthropicSSE(c.Writer, "content_block_stop", AnthropicStreamEvent{
-								Type:  "content_block_stop",
-								Index: intPtr(contentBlockIdx),
-							})
-							flusher.Flush()
-						}
+					mergeAnthropicToolCallState(choice.Message.ToolCalls, pendingToolCalls)
+					for _, tc := range collectAnthropicToolCalls(pendingToolCalls, emittedToolArgs, false) {
+						emitToolUse(tc)
 					}
-
-
-					contentBlockIdx++
-					writeAnthropicSSE(c.Writer, "content_block_start", AnthropicStreamEvent{
-						Type:         "content_block_start",
-						Index:        intPtr(contentBlockIdx),
-						ContentBlock: &AnthropicContentBlock{Type: "text", Text: ""},
-					})
-					flusher.Flush()
 				}
 			}
 		}
 	}
 
 done:
-	writeAnthropicSSE(c.Writer, "content_block_stop", AnthropicStreamEvent{
-		Type:  "content_block_stop",
-		Index: intPtr(contentBlockIdx),
-	})
-	flusher.Flush()
+	for _, tc := range collectAnthropicToolCalls(pendingToolCalls, emittedToolArgs, true) {
+		emitToolUse(tc)
+	}
+	if nextBlockIndex == 0 {
+		startTextBlock()
+	}
+	stopTextBlock()
 
 	stopReason := "end_turn"
 	if hasToolCall {
@@ -420,7 +416,7 @@ done:
 func (h *AnthropicHandler) handleAnthropicNonStreamResponse(c *gin.Context, body io.Reader, model string, account *Account) {
 	respID := "msg_" + uuid.New().String()[:24]
 	var fullContent strings.Builder
-	var toolCalls []OAIToolCall
+	pendingToolCalls := map[int]*OAIStreamToolCall{}
 	var usage AnthropicUsage
 
 	scanner := bufio.NewScanner(body)
@@ -451,31 +447,30 @@ func (h *AnthropicHandler) handleAnthropicNonStreamResponse(c *gin.Context, body
 			return
 		}
 
-		if event.Type == "data" {
-			var chatData CFChatData
-			if err := json.Unmarshal(event.Data, &chatData); err != nil {
-				continue
+		if event.Type != "data" {
+			continue
+		}
+
+		var chatData CFChatData
+		if err := json.Unmarshal(event.Data, &chatData); err != nil {
+			continue
+		}
+
+		for _, choice := range chatData.Choices {
+			fullContent.WriteString(choice.Message.Content)
+			if len(choice.Message.ToolCalls) > 0 {
+				mergeAnthropicToolCallState(choice.Message.ToolCalls, pendingToolCalls)
 			}
-			for _, choice := range chatData.Choices {
-				fullContent.WriteString(choice.Message.Content)
-				if len(choice.Message.ToolCalls) > 0 {
-					var tcs []OAIToolCall
-					if err := json.Unmarshal(choice.Message.ToolCalls, &tcs); err == nil {
-						toolCalls = append(toolCalls, tcs...)
-					}
-				}
-			}
-			if chatData.Usage != nil {
-				usage = AnthropicUsage{
-					InputTokens:  chatData.Usage.PromptTokens,
-					OutputTokens: chatData.Usage.CompletionTokens,
-				}
+		}
+		if chatData.Usage != nil {
+			usage = AnthropicUsage{
+				InputTokens:  chatData.Usage.PromptTokens,
+				OutputTokens: chatData.Usage.CompletionTokens,
 			}
 		}
 	}
 
 	var contentBlocks []AnthropicContentBlock
-
 	text := fullContent.String()
 	if text != "" {
 		contentBlocks = append(contentBlocks, AnthropicContentBlock{
@@ -484,18 +479,13 @@ func (h *AnthropicHandler) handleAnthropicNonStreamResponse(c *gin.Context, body
 		})
 	}
 
+	toolCalls := collectAnthropicToolCalls(pendingToolCalls, nil, true)
 	for _, tc := range toolCalls {
-		var inputJSON json.RawMessage
-		if tc.Function.Arguments != "" {
-			inputJSON = json.RawMessage(tc.Function.Arguments)
-		} else {
-			inputJSON = json.RawMessage("{}")
-		}
 		contentBlocks = append(contentBlocks, AnthropicContentBlock{
 			Type:  "tool_use",
 			ID:    tc.ID,
 			Name:  tc.Function.Name,
-			Input: inputJSON,
+			Input: anthropicToolCallInput(tc.Function.Arguments),
 		})
 	}
 
@@ -542,7 +532,6 @@ func (h *AnthropicHandler) markAnthropicAccountByError(event CFSSEEvent, account
 	}
 }
 
-
 type OAIToolCall struct {
 	ID       string          `json:"id"`
 	Type     string          `json:"type"`
@@ -554,7 +543,17 @@ type OAIFunctionCall struct {
 	Arguments string `json:"arguments"`
 }
 
-// convertAnthropicMessages 将 Anthropic 消息格式转换为 CodeFlicker 格式
+func mapAnthropicRole(role string) string {
+	switch role {
+	case "developer":
+		return "system"
+	case "function":
+		return "tool"
+	default:
+		return role
+	}
+}
+
 func convertAnthropicMessages(messages []AnthropicMessage, system json.RawMessage) []CFMessage {
 	cfMessages := make([]CFMessage, 0, len(messages)+1)
 
@@ -571,7 +570,11 @@ func convertAnthropicMessages(messages []AnthropicMessage, system json.RawMessag
 	}
 
 	for _, msg := range messages {
-		cfMsg := CFMessage{Role: msg.Role}
+		mappedRole := mapAnthropicRole(msg.Role)
+		cfMsg := CFMessage{
+			Role:       mappedRole,
+			ToolCallID: msg.ToolCallID,
+		}
 
 		if len(msg.Content) > 0 {
 			var contentStr string
@@ -585,82 +588,17 @@ func convertAnthropicMessages(messages []AnthropicMessage, system json.RawMessag
 
 			var blocks []AnthropicContentBlock
 			if err := json.Unmarshal(msg.Content, &blocks); err == nil {
-				hasToolResult := false
-				hasToolUse := false
-				for _, b := range blocks {
-					if b.Type == "tool_result" {
-						hasToolResult = true
-					}
-					if b.Type == "tool_use" {
-						hasToolUse = true
-					}
-				}
-
-				if hasToolResult {
-					for _, b := range blocks {
-						if b.Type == "tool_result" {
-							toolMsg := CFMessage{
-								Role:       "tool",
-								ToolCallID: b.ToolUseID,
-							}
-							resultText := extractToolResultContent(b)
-							parts := []CFContentPart{{Type: "text", Text: resultText}}
-							contentJSON, _ := json.Marshal(parts)
-							toolMsg.Content = contentJSON
-							cfMessages = append(cfMessages, toolMsg)
-						}
-					}
-					continue
-				}
-
-				if hasToolUse && msg.Role == "assistant" {
-					var textParts []CFContentPart
-					var oaiToolCalls []OAIToolCall
-					for _, b := range blocks {
-						switch b.Type {
-						case "text":
-							if b.Text != "" {
-								textParts = append(textParts, CFContentPart{Type: "text", Text: b.Text})
-							}
-						case "tool_use":
-							oaiToolCalls = append(oaiToolCalls, OAIToolCall{
-								ID:   b.ID,
-								Type: "function",
-								Function: OAIFunctionCall{
-									Name:      b.Name,
-									Arguments: string(b.Input),
-								},
-							})
-						}
-					}
-					if len(textParts) == 0 {
-						textParts = []CFContentPart{{Type: "text", Text: ""}}
-					}
-					contentJSON, _ := json.Marshal(textParts)
+				switch mappedRole {
+				case "user":
+					cfMessages = appendAnthropicUserBlocks(cfMessages, blocks)
+				case "assistant":
+					cfMessages = appendAnthropicAssistantBlocks(cfMessages, blocks)
+				default:
+					parts := anthropicBlocksToTextParts(blocks, true)
+					contentJSON, _ := json.Marshal(parts)
 					cfMsg.Content = contentJSON
-					if len(oaiToolCalls) > 0 {
-						toolCallsJSON, _ := json.Marshal(oaiToolCalls)
-						cfMsg.ToolCalls = toolCallsJSON
-					}
 					cfMessages = append(cfMessages, cfMsg)
-					continue
 				}
-
-				// 普通文本消息
-				var parts []CFContentPart
-				for _, b := range blocks {
-					if b.Type == "text" {
-						parts = append(parts, CFContentPart{Type: "text", Text: b.Text})
-					} else if b.Type == "image" {
-						parts = append(parts, CFContentPart{Type: "text", Text: "[图片内容已省略]"})
-					}
-				}
-				if len(parts) == 0 {
-					parts = []CFContentPart{{Type: "text", Text: ""}}
-				}
-				contentJSON, _ := json.Marshal(parts)
-				cfMsg.Content = contentJSON
-				cfMessages = append(cfMessages, cfMsg)
 				continue
 			}
 
@@ -673,16 +611,176 @@ func convertAnthropicMessages(messages []AnthropicMessage, system json.RawMessag
 	return cfMessages
 }
 
-// extractSystemText 从 Anthropic system 字段中提取文本
-// system 可以是字符串或 content block 数组
+func mergeAnthropicToolCallState(raw json.RawMessage, pending map[int]*OAIStreamToolCall) {
+	var incoming []OAIStreamToolCall
+	if err := json.Unmarshal(raw, &incoming); err != nil {
+		return
+	}
+
+	for _, tc := range incoming {
+		existing, ok := pending[tc.Index]
+		if !ok {
+			existing = &OAIStreamToolCall{Index: tc.Index}
+			pending[tc.Index] = existing
+		}
+		if tc.ID != "" {
+			existing.ID = tc.ID
+		}
+		if tc.Type != "" {
+			existing.Type = tc.Type
+		}
+		if tc.Function.Name != "" {
+			existing.Function.Name = tc.Function.Name
+		}
+		if tc.Function.Arguments != "" {
+			existing.Function.Arguments += tc.Function.Arguments
+		}
+	}
+}
+
+func collectAnthropicToolCalls(pending map[int]*OAIStreamToolCall, emitted map[int]string, includeEmpty bool) []OAIStreamToolCall {
+	indexes := make([]int, 0, len(pending))
+	for idx := range pending {
+		indexes = append(indexes, idx)
+	}
+	sort.Ints(indexes)
+
+	out := make([]OAIStreamToolCall, 0, len(indexes))
+	for _, idx := range indexes {
+		tc := pending[idx]
+		args := strings.TrimSpace(tc.Function.Arguments)
+		if args == "" {
+			if !includeEmpty || (tc.ID == "" && tc.Function.Name == "") {
+				continue
+			}
+			if emitted != nil {
+				if emitted[idx] == "{}" {
+					continue
+				}
+				emitted[idx] = "{}"
+			}
+			out = append(out, *tc)
+			continue
+		}
+		if !json.Valid([]byte(args)) {
+			continue
+		}
+		if emitted != nil && emitted[idx] == args {
+			continue
+		}
+		out = append(out, *tc)
+		if emitted != nil {
+			emitted[idx] = args
+		}
+	}
+	return out
+}
+
+func anthropicToolCallInput(arguments string) json.RawMessage {
+	args := strings.TrimSpace(arguments)
+	if args == "" || !json.Valid([]byte(args)) {
+		return json.RawMessage("{}")
+	}
+	return json.RawMessage(args)
+}
+
+func appendAnthropicUserBlocks(cfMessages []CFMessage, blocks []AnthropicContentBlock) []CFMessage {
+	var textParts []CFContentPart
+	added := false
+
+	flushText := func(force bool) {
+		if len(textParts) == 0 && !force {
+			return
+		}
+		if len(textParts) == 0 {
+			textParts = []CFContentPart{{Type: "text", Text: ""}}
+		}
+		contentJSON, _ := json.Marshal(textParts)
+		cfMessages = append(cfMessages, CFMessage{
+			Role:    "user",
+			Content: contentJSON,
+		})
+		textParts = nil
+		added = true
+	}
+
+	for _, b := range blocks {
+		switch b.Type {
+		case "text":
+			if b.Text != "" {
+				textParts = append(textParts, CFContentPart{Type: "text", Text: b.Text})
+			}
+		case "image":
+			textParts = append(textParts, CFContentPart{Type: "text", Text: "[image omitted]"})
+		case "tool_result":
+			flushText(false)
+			resultText := extractToolResultContent(b)
+			contentJSON, _ := json.Marshal([]CFContentPart{{Type: "text", Text: resultText}})
+			cfMessages = append(cfMessages, CFMessage{
+				Role:       "tool",
+				ToolCallID: b.ToolUseID,
+				Content:    contentJSON,
+			})
+			added = true
+		}
+	}
+
+	flushText(!added)
+	return cfMessages
+}
+
+func appendAnthropicAssistantBlocks(cfMessages []CFMessage, blocks []AnthropicContentBlock) []CFMessage {
+	cfMsg := CFMessage{Role: "assistant"}
+	textParts := anthropicBlocksToTextParts(blocks, true)
+	var oaiToolCalls []OAIToolCall
+
+	for _, b := range blocks {
+		if b.Type != "tool_use" {
+			continue
+		}
+		oaiToolCalls = append(oaiToolCalls, OAIToolCall{
+			ID:   b.ID,
+			Type: "function",
+			Function: OAIFunctionCall{
+				Name:      b.Name,
+				Arguments: string(anthropicToolCallInput(string(b.Input))),
+			},
+		})
+	}
+
+	contentJSON, _ := json.Marshal(textParts)
+	cfMsg.Content = contentJSON
+	if len(oaiToolCalls) > 0 {
+		toolCallsJSON, _ := json.Marshal(oaiToolCalls)
+		cfMsg.ToolCalls = toolCallsJSON
+	}
+	return append(cfMessages, cfMsg)
+}
+
+func anthropicBlocksToTextParts(blocks []AnthropicContentBlock, includeEmpty bool) []CFContentPart {
+	var parts []CFContentPart
+	for _, b := range blocks {
+		switch b.Type {
+		case "text":
+			if b.Text != "" {
+				parts = append(parts, CFContentPart{Type: "text", Text: b.Text})
+			}
+		case "image":
+			parts = append(parts, CFContentPart{Type: "text", Text: "[image omitted]"})
+		}
+	}
+	if len(parts) == 0 && includeEmpty {
+		return []CFContentPart{{Type: "text", Text: ""}}
+	}
+	return parts
+}
+
 func extractSystemText(system json.RawMessage) string {
-	// 尝试解析为字符串
 	var systemStr string
 	if err := json.Unmarshal(system, &systemStr); err == nil {
 		return systemStr
 	}
 
-	// 尝试解析为 content block 数组
 	var blocks []AnthropicContentBlock
 	if err := json.Unmarshal(system, &blocks); err == nil {
 		var parts []string
@@ -697,19 +795,16 @@ func extractSystemText(system json.RawMessage) string {
 	return ""
 }
 
-// extractToolResultContent 从 Anthropic tool_result 块中提取文本内容
 func extractToolResultContent(block AnthropicContentBlock) string {
 	if len(block.Content) == 0 {
 		return ""
 	}
 
-	// 尝试解析为字符串
 	var contentStr string
 	if err := json.Unmarshal(block.Content, &contentStr); err == nil {
 		return contentStr
 	}
 
-	// 尝试解析为 content block 数组
 	var contentBlocks []AnthropicContentBlock
 	if err := json.Unmarshal(block.Content, &contentBlocks); err == nil {
 		var parts []string
@@ -724,8 +819,6 @@ func extractToolResultContent(block AnthropicContentBlock) string {
 	return string(block.Content)
 }
 
-// convertAnthropicTools 将 Anthropic tools 格式转换为 OpenAI/CF tools 格式
-// Anthropic: [{name, description, input_schema}] → OpenAI: [{type: "function", function: {name, description, parameters}}]
 func convertAnthropicTools(anthropicTools json.RawMessage) json.RawMessage {
 	var tools []map[string]json.RawMessage
 	if err := json.Unmarshal(anthropicTools, &tools); err != nil {
@@ -747,10 +840,10 @@ func convertAnthropicTools(anthropicTools json.RawMessage) json.RawMessage {
 		fn := oaiFunction{}
 
 		if nameRaw, ok := tool["name"]; ok {
-			json.Unmarshal(nameRaw, &fn.Name)
+			_ = json.Unmarshal(nameRaw, &fn.Name)
 		}
 		if descRaw, ok := tool["description"]; ok {
-			json.Unmarshal(descRaw, &fn.Description)
+			_ = json.Unmarshal(descRaw, &fn.Description)
 		}
 		if schemaRaw, ok := tool["input_schema"]; ok {
 			fn.Parameters = schemaRaw
@@ -766,7 +859,6 @@ func convertAnthropicTools(anthropicTools json.RawMessage) json.RawMessage {
 	return result
 }
 
-// writeAnthropicSSE 写入 Anthropic 格式的 SSE 事件
 func writeAnthropicSSE(w io.Writer, eventType string, data interface{}) {
 	jsonData, err := json.Marshal(data)
 	if err != nil {
@@ -775,5 +867,4 @@ func writeAnthropicSSE(w io.Writer, eventType string, data interface{}) {
 	fmt.Fprintf(w, "event: %s\ndata: %s\n\n", eventType, jsonData)
 }
 
-// intPtr 返回整数指针
 func intPtr(i int) *int { return &i }

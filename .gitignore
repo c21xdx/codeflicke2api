@@ -34,3 +34,4 @@ logs/
 dist/
 build/
 node_modules/
+handler_anthropic_test.go
