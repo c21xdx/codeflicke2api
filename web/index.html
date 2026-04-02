@@ -1534,7 +1534,7 @@
                 const result = await api('/admin/settings', { method: 'PUT', body: JSON.stringify(body) });
                 toast(result.message);
                 if (body.admin_token) { adminToken = body.admin_token; localStorage.setItem('adminToken', adminToken); }
-                loadSettings(); loadKeys();
+                loadSettings();
             } catch (e) { toast(e.message, 'error'); }
         }
 
