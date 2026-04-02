@@ -55,7 +55,7 @@ func (u *UpstreamClient) buildHeaders(account *Account) map[string]string {
 		"Authorization":      "Bearer " + account.JWTToken,
 		"kwaipilot-username": account.UserID,
 		"kwaipilot-platform": "codeflicker-ide",
-		"kwaipilot-version":  "9.6.2511250",
+		"kwaipilot-version":  "9.6.2601080",
 		"User-Agent":         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) CodeFlicker/1.101.2 Chrome/134.0.6998.205 Electron/35.5.1 Safari/537.36",
 	}
 }

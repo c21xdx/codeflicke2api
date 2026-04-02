@@ -202,7 +202,7 @@ func (h *OpenAIHandler) HandleChatCompletions(c *gin.Context) {
 			Tools:     req.Tools,
 			Model:     upstreamModel,
 			DeviceInfo: CFDeviceInfo{
-				Platform: "codeflicker-ide", IDEVersion: "1.101.2", PluginVersion: "9.6.2511250",
+				Platform: "codeflicker-ide", IDEVersion: "1.101.2", PluginVersion: "9.6.2601080",
 			},
 		}
 
