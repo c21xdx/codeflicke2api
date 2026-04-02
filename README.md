@@ -76,3 +76,7 @@ codeflicke2api/
 ## 技术栈
 
 Go + Gin + GORM + SQLite
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=Futureppo/codeflicke2api&type=Date)](https://star-history.com/#Futureppo/codeflicke2api&Date)
