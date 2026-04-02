@@ -93,14 +93,18 @@ func NewOpenAIHandler(pool *AccountPool, upstream *UpstreamClient, cfg *AppConfi
 
 // 上游模型标识 ↔ 用户友好名称的双向映射
 var modelNameMapping = map[string]string{
-	"GLM_5_TOC":         "glm-5",
-	"MINIMAX_M2_1_TOC":  "minimax-m2.5",
-	"GPT_5_2_TOC":       "gpt-5.2",
-	"KIMI_K2_5_TOC":     "kimi-k2.5",
-	"kat_coder_TOC":     "kat-coder-pro-v1",
-	"GLM_4_7_TOC":       "glm-4.7",
-	"DEEPSEEK_V3_2_TOC": "deepseek-v3.2",
-	"MINIMAX_M2_5_TOC":  "minimax-m2",
+	"GLM_5_TOC":              "glm-5",
+	"GLM_4_7_TOC":            "glm-4.7",
+	"GPT_5_2_TOC":            "gpt-5.2",
+	"GPT_5_3_CODEX_TOC":      "gpt-5.3-codex",
+	"GPT_5_4_TOC":            "gpt-5.4",
+	"GEMINI_PRO_3_1_TOC":     "gemini-3.1-pro",
+	"KIMI_K2_5_TOC":          "kimi-k2.5",
+	"DEEPSEEK_V3_2_TOC":      "deepseek-v3.2",
+	"kat_coder_TOC":          "kat-coder-pro-v1",
+	"kat_coder_pro_v2_TOC":   "kat-coder-pro-v2",
+	"MINIMAX_M2_5_TOC":       "minimax-m2.5",
+	"MINIMAX_M2_7_TOC":       "minimax-m2.7",
 }
 
 var reverseModelMapping = func() map[string]string {
@@ -128,11 +132,15 @@ var builtinModels = []OAIModel{
 	{ID: "glm-5", Object: "model", Created: 1700000000, OwnedBy: "zhipu"},
 	{ID: "glm-4.7", Object: "model", Created: 1700000000, OwnedBy: "zhipu"},
 	{ID: "gpt-5.2", Object: "model", Created: 1700000000, OwnedBy: "openai"},
+	{ID: "gpt-5.3-codex", Object: "model", Created: 1700000000, OwnedBy: "openai"},
+	{ID: "gpt-5.4", Object: "model", Created: 1700000000, OwnedBy: "openai"},
+	{ID: "gemini-3.1-pro", Object: "model", Created: 1700000000, OwnedBy: "google"},
 	{ID: "kimi-k2.5", Object: "model", Created: 1700000000, OwnedBy: "moonshot"},
-	{ID: "kat-coder-pro-v1", Object: "model", Created: 1700000000, OwnedBy: "codeflicker"},
-	{ID: "minimax-m2.5", Object: "model", Created: 1700000000, OwnedBy: "minimax"},
-	{ID: "minimax-m2", Object: "model", Created: 1700000000, OwnedBy: "minimax"},
 	{ID: "deepseek-v3.2", Object: "model", Created: 1700000000, OwnedBy: "deepseek"},
+	{ID: "kat-coder-pro-v1", Object: "model", Created: 1700000000, OwnedBy: "codeflicker"},
+	{ID: "kat-coder-pro-v2", Object: "model", Created: 1700000000, OwnedBy: "codeflicker"},
+	{ID: "minimax-m2.5", Object: "model", Created: 1700000000, OwnedBy: "minimax"},
+	{ID: "minimax-m2.7", Object: "model", Created: 1700000000, OwnedBy: "minimax"},
 }
 
 func (h *OpenAIHandler) HandleModels(c *gin.Context) {
