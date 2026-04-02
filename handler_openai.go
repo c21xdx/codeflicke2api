@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -79,6 +80,13 @@ type OAIStreamChunk struct {
 	Created int64       `json:"created"`
 	Model   string      `json:"model"`
 	Choices []OAIChoice `json:"choices"`
+}
+
+type OAIStreamToolCall struct {
+	Index    int               `json:"index"`
+	ID       string            `json:"id,omitempty"`
+	Type     string            `json:"type,omitempty"`
+	Function OAIFunctionCall   `json:"function"`
 }
 
 type OpenAIHandler struct {
@@ -281,6 +289,8 @@ func (h *OpenAIHandler) handleStreamResponse(c *gin.Context, body io.Reader, mod
 	scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
 
 	var streamInputTokens, streamOutputTokens int
+	pendingToolCalls := map[int]*OAIStreamToolCall{}
+	emittedToolArgs := map[int]string{}
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -324,12 +334,23 @@ func (h *OpenAIHandler) handleStreamResponse(c *gin.Context, body io.Reader, mod
 				streamOutputTokens = chatData.Usage.CompletionTokens
 			}
 			for _, choice := range chatData.Choices {
+				var mergedToolCalls json.RawMessage
+				if len(choice.Message.ToolCalls) > 0 {
+					mergedToolCalls = mergeStreamingToolCalls(choice.Message.ToolCalls, pendingToolCalls, emittedToolArgs)
+				}
+
+				shouldEmit := choice.Message.Content != "" || len(mergedToolCalls) > 0 || choice.FinishReason != nil
+				if !shouldEmit {
+					continue
+				}
+
 				chunk := OAIStreamChunk{
 					ID: respID, Object: "chat.completion.chunk", Created: created, Model: model,
 					Choices: []OAIChoice{{Index: 0,
 						Delta: &OAIRespMessage{
-							Role: choice.Message.Role, Content: choice.Message.Content,
-							ToolCalls: choice.Message.ToolCalls,
+							Role:      choice.Message.Role,
+							Content:   choice.Message.Content,
+							ToolCalls: mergedToolCalls,
 						},
 						FinishReason: choice.FinishReason,
 					}},
@@ -474,3 +495,57 @@ func convertMessages(messages []OAIMessage) []CFMessage {
 }
 
 func strPtr(s string) *string { return &s }
+
+func mergeStreamingToolCalls(raw json.RawMessage, pending map[int]*OAIStreamToolCall, emitted map[int]string) json.RawMessage {
+	var incoming []OAIStreamToolCall
+	if err := json.Unmarshal(raw, &incoming); err != nil {
+		return raw
+	}
+
+	for _, tc := range incoming {
+		existing, ok := pending[tc.Index]
+		if !ok {
+			existing = &OAIStreamToolCall{Index: tc.Index}
+			pending[tc.Index] = existing
+		}
+		if tc.ID != "" {
+			existing.ID = tc.ID
+		}
+		if tc.Type != "" {
+			existing.Type = tc.Type
+		}
+		if tc.Function.Name != "" {
+			existing.Function.Name = tc.Function.Name
+		}
+		if tc.Function.Arguments != "" {
+			existing.Function.Arguments += tc.Function.Arguments
+		}
+	}
+
+	indexes := make([]int, 0, len(pending))
+	for idx := range pending {
+		indexes = append(indexes, idx)
+	}
+	sort.Ints(indexes)
+
+	out := make([]OAIStreamToolCall, 0, len(indexes))
+	for _, idx := range indexes {
+		tc := pending[idx]
+		args := strings.TrimSpace(tc.Function.Arguments)
+		if args == "" || !json.Valid([]byte(args)) || emitted[idx] == args {
+			continue
+		}
+		out = append(out, *tc)
+		emitted[idx] = args
+	}
+
+	if len(out) == 0 {
+		return nil
+	}
+
+	buf, err := json.Marshal(out)
+	if err != nil {
+		return nil
+	}
+	return buf
+}
