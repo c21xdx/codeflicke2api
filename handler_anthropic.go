@@ -30,13 +30,11 @@ type AnthropicRequest struct {
 	ToolChoice    json.RawMessage    `json:"tool_choice,omitempty"`
 }
 
-// AnthropicMessage Anthropic 消息格式
 type AnthropicMessage struct {
 	Role    string          `json:"role"`
 	Content json.RawMessage `json:"content"`
 }
 
-// AnthropicContentBlock Anthropic 内容块（请求/响应通用）
 type AnthropicContentBlock struct {
 	Type  string          `json:"type"`
 	Text  string          `json:"text,omitempty"`
@@ -44,12 +42,11 @@ type AnthropicContentBlock struct {
 	Name  string          `json:"name,omitempty"`
 	Input json.RawMessage `json:"input,omitempty"`
 
-	// tool_result 使用的字段
+
 	ToolUseID string          `json:"tool_use_id,omitempty"`
 	Content   json.RawMessage `json:"content,omitempty"`
 }
 
-// AnthropicResponse Anthropic 非流式响应
 type AnthropicResponse struct {
 	ID           string                  `json:"id"`
 	Type         string                  `json:"type"`
@@ -61,13 +58,11 @@ type AnthropicResponse struct {
 	Usage        AnthropicUsage          `json:"usage"`
 }
 
-// AnthropicUsage Anthropic Token 用量统计
 type AnthropicUsage struct {
 	InputTokens  int `json:"input_tokens"`
 	OutputTokens int `json:"output_tokens"`
 }
 
-// AnthropicStreamEvent Anthropic SSE 流式事件
 type AnthropicStreamEvent struct {
 	Type         string                 `json:"type"`
 	Index        *int                   `json:"index,omitempty"`
@@ -77,7 +72,6 @@ type AnthropicStreamEvent struct {
 	Usage        *AnthropicUsage        `json:"usage,omitempty"`
 }
 
-// AnthropicDelta 流式响应增量内容
 type AnthropicDelta struct {
 	Type         string          `json:"type,omitempty"`
 	Text         string          `json:"text,omitempty"`
@@ -87,19 +81,16 @@ type AnthropicDelta struct {
 	Input        json.RawMessage `json:"input,omitempty"`
 }
 
-// AnthropicErrorResponse Anthropic 错误响应
 type AnthropicErrorResponse struct {
 	Type  string         `json:"type"`
 	Error AnthropicError `json:"error"`
 }
 
-// AnthropicError Anthropic 错误详情
 type AnthropicError struct {
 	Type    string `json:"type"`
 	Message string `json:"message"`
 }
 
-// AnthropicHandler Anthropic Messages API 的请求处理器
 type AnthropicHandler struct {
 	pool     *AccountPool
 	upstream *UpstreamClient
@@ -107,12 +98,10 @@ type AnthropicHandler struct {
 	db       *gorm.DB
 }
 
-// NewAnthropicHandler 创建 Anthropic 兼容处理器
 func NewAnthropicHandler(pool *AccountPool, upstream *UpstreamClient, cfg *AppConfig, db *gorm.DB) *AnthropicHandler {
 	return &AnthropicHandler{pool: pool, upstream: upstream, cfg: cfg, db: db}
 }
 
-// HandleMessages 处理 Anthropic Messages API 请求，转换格式并代理到上游
 func (h *AnthropicHandler) HandleMessages(c *gin.Context) {
 	var req AnthropicRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -123,7 +112,6 @@ func (h *AnthropicHandler) HandleMessages(c *gin.Context) {
 		return
 	}
 
-	// max_tokens 是 Anthropic API 的必填字段
 	if req.MaxTokens <= 0 {
 		req.MaxTokens = 64000
 	}
@@ -133,11 +121,9 @@ func (h *AnthropicHandler) HandleMessages(c *gin.Context) {
 		maxRetries = 1
 	}
 
-	// 将 Anthropic 消息转换为 CodeFlicker 格式
 	cfMessages := convertAnthropicMessages(req.Messages, req.System)
 	upstreamModel := resolveModelName(req.Model)
 
-	// 转换 Anthropic tools 为 OpenAI/CF 格式
 	var cfTools json.RawMessage
 	if len(req.Tools) > 0 {
 		cfTools = convertAnthropicTools(req.Tools)
@@ -213,7 +199,7 @@ func (h *AnthropicHandler) HandleMessages(c *gin.Context) {
 			return
 		}
 
-		// 请求成功，处理响应
+
 		if attempt > 1 {
 			log.Printf("上游请求在第 %d 次重试后成功", attempt)
 		}
@@ -229,7 +215,6 @@ func (h *AnthropicHandler) HandleMessages(c *gin.Context) {
 	}
 }
 
-// handleAnthropicStreamResponse 将上游 SSE 流转换为 Anthropic 流式格式逐块输出
 func (h *AnthropicHandler) handleAnthropicStreamResponse(c *gin.Context, body io.Reader, model string, account *Account) {
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
@@ -246,7 +231,7 @@ func (h *AnthropicHandler) handleAnthropicStreamResponse(c *gin.Context, body io
 
 	respID := "msg_" + uuid.New().String()[:24]
 
-	// 发送 message_start 事件
+
 	msgStartResp := &AnthropicResponse{
 		ID:      respID,
 		Type:    "message",
@@ -261,7 +246,7 @@ func (h *AnthropicHandler) handleAnthropicStreamResponse(c *gin.Context, body io
 	})
 	flusher.Flush()
 
-	// 发送 content_block_start
+
 	contentBlockIdx := 0
 	writeAnthropicSSE(c.Writer, "content_block_start", AnthropicStreamEvent{
 		Type:         "content_block_start",
@@ -296,13 +281,11 @@ func (h *AnthropicHandler) handleAnthropicStreamResponse(c *gin.Context, body io
 		switch event.Type {
 		case "error":
 			h.markAnthropicAccountByError(event, account)
-			// 结束当前文本块
 			writeAnthropicSSE(c.Writer, "content_block_stop", AnthropicStreamEvent{
 				Type:  "content_block_stop",
 				Index: intPtr(contentBlockIdx),
 			})
 			flusher.Flush()
-			// 发送错误信息作为新文本块
 			contentBlockIdx++
 			writeAnthropicSSE(c.Writer, "content_block_start", AnthropicStreamEvent{
 				Type:         "content_block_start",
@@ -328,14 +311,14 @@ func (h *AnthropicHandler) handleAnthropicStreamResponse(c *gin.Context, body io
 				continue
 			}
 
-			// 收集 usage 数据
+
 			if chatData.Usage != nil {
 				totalInputTokens = chatData.Usage.PromptTokens
 				totalOutputTokens = chatData.Usage.CompletionTokens
 			}
 
 			for _, choice := range chatData.Choices {
-				// 处理文本内容
+
 				if choice.Message.Content != "" {
 					writeAnthropicSSE(c.Writer, "content_block_delta", AnthropicStreamEvent{
 						Type:  "content_block_delta",
@@ -345,22 +328,22 @@ func (h *AnthropicHandler) handleAnthropicStreamResponse(c *gin.Context, body io
 					flusher.Flush()
 				}
 
-				// 处理 tool_calls
+
 				if len(choice.Message.ToolCalls) > 0 {
 					hasToolCall = true
-					// 关闭当前文本块
+
 					writeAnthropicSSE(c.Writer, "content_block_stop", AnthropicStreamEvent{
 						Type:  "content_block_stop",
 						Index: intPtr(contentBlockIdx),
 					})
 					flusher.Flush()
 
-					// 解析 tool_calls 并为每个 tool_call 发送事件
+
 					var toolCalls []OAIToolCall
 					if err := json.Unmarshal(choice.Message.ToolCalls, &toolCalls); err == nil {
 						for _, tc := range toolCalls {
 							contentBlockIdx++
-							// tool_use content_block_start
+
 							writeAnthropicSSE(c.Writer, "content_block_start", AnthropicStreamEvent{
 								Type:  "content_block_start",
 								Index: intPtr(contentBlockIdx),
@@ -373,7 +356,7 @@ func (h *AnthropicHandler) handleAnthropicStreamResponse(c *gin.Context, body io
 							})
 							flusher.Flush()
 
-							// 发送 input_json_delta
+
 							if len(tc.Function.Arguments) > 0 {
 								writeAnthropicSSE(c.Writer, "content_block_delta", AnthropicStreamEvent{
 									Type:  "content_block_delta",
@@ -386,7 +369,7 @@ func (h *AnthropicHandler) handleAnthropicStreamResponse(c *gin.Context, body io
 								flusher.Flush()
 							}
 
-							// tool_use content_block_stop
+
 							writeAnthropicSSE(c.Writer, "content_block_stop", AnthropicStreamEvent{
 								Type:  "content_block_stop",
 								Index: intPtr(contentBlockIdx),
@@ -395,7 +378,7 @@ func (h *AnthropicHandler) handleAnthropicStreamResponse(c *gin.Context, body io
 						}
 					}
 
-					// 开启新的文本块（如果后续还有文本）
+
 					contentBlockIdx++
 					writeAnthropicSSE(c.Writer, "content_block_start", AnthropicStreamEvent{
 						Type:         "content_block_start",
@@ -409,14 +392,12 @@ func (h *AnthropicHandler) handleAnthropicStreamResponse(c *gin.Context, body io
 	}
 
 done:
-	// 结束最后一个 content block
 	writeAnthropicSSE(c.Writer, "content_block_stop", AnthropicStreamEvent{
 		Type:  "content_block_stop",
 		Index: intPtr(contentBlockIdx),
 	})
 	flusher.Flush()
 
-	// 发送 message_delta（包含 stop_reason 和 usage）
 	stopReason := "end_turn"
 	if hasToolCall {
 		stopReason = "tool_use"
@@ -428,17 +409,14 @@ done:
 	})
 	flusher.Flush()
 
-	// 发送 message_stop
 	writeAnthropicSSE(c.Writer, "message_stop", AnthropicStreamEvent{
 		Type: "message_stop",
 	})
 	flusher.Flush()
 
-	// 记录流式请求的用量
 	h.recordAnthropicUsage(model, totalInputTokens, totalOutputTokens)
 }
 
-// handleAnthropicNonStreamResponse 累积上游 SSE 流全部数据，组装为 Anthropic 非流式响应返回
 func (h *AnthropicHandler) handleAnthropicNonStreamResponse(c *gin.Context, body io.Reader, model string, account *Account) {
 	respID := "msg_" + uuid.New().String()[:24]
 	var fullContent strings.Builder
@@ -496,7 +474,6 @@ func (h *AnthropicHandler) handleAnthropicNonStreamResponse(c *gin.Context, body
 		}
 	}
 
-	// 构造响应 content 块
 	var contentBlocks []AnthropicContentBlock
 
 	text := fullContent.String()
@@ -507,7 +484,6 @@ func (h *AnthropicHandler) handleAnthropicNonStreamResponse(c *gin.Context, body
 		})
 	}
 
-	// 将 tool_calls 转换为 Anthropic tool_use 块
 	for _, tc := range toolCalls {
 		var inputJSON json.RawMessage
 		if tc.Function.Arguments != "" {
@@ -532,7 +508,6 @@ func (h *AnthropicHandler) handleAnthropicNonStreamResponse(c *gin.Context, body
 		stopReason = "tool_use"
 	}
 
-	// 记录用量
 	h.recordAnthropicUsage(model, usage.InputTokens, usage.OutputTokens)
 
 	c.JSON(http.StatusOK, AnthropicResponse{
@@ -546,7 +521,6 @@ func (h *AnthropicHandler) handleAnthropicNonStreamResponse(c *gin.Context, body
 	})
 }
 
-// recordAnthropicUsage 记录本次请求的 token 用量
 func (h *AnthropicHandler) recordAnthropicUsage(model string, inputTokens, outputTokens int) {
 	if inputTokens == 0 && outputTokens == 0 {
 		return
@@ -559,7 +533,6 @@ func (h *AnthropicHandler) recordAnthropicUsage(model string, inputTokens, outpu
 	})
 }
 
-// markAnthropicAccountByError 根据上游错误码标记账号状态
 func (h *AnthropicHandler) markAnthropicAccountByError(event CFSSEEvent, account *Account) {
 	switch {
 	case event.Reply == "15" || event.Reply == "61":
@@ -569,18 +542,13 @@ func (h *AnthropicHandler) markAnthropicAccountByError(event CFSSEEvent, account
 	}
 }
 
-// ============================================================
-// 格式转换辅助函数
-// ============================================================
 
-// OAIToolCall OpenAI tool_call 结构（用于解析上游响应）
 type OAIToolCall struct {
 	ID       string          `json:"id"`
 	Type     string          `json:"type"`
 	Function OAIFunctionCall `json:"function"`
 }
 
-// OAIFunctionCall OpenAI function 调用信息
 type OAIFunctionCall struct {
 	Name      string `json:"name"`
 	Arguments string `json:"arguments"`
@@ -590,7 +558,6 @@ type OAIFunctionCall struct {
 func convertAnthropicMessages(messages []AnthropicMessage, system json.RawMessage) []CFMessage {
 	cfMessages := make([]CFMessage, 0, len(messages)+1)
 
-	// 处理 system prompt
 	if len(system) > 0 {
 		systemText := extractSystemText(system)
 		if systemText != "" {
@@ -603,13 +570,10 @@ func convertAnthropicMessages(messages []AnthropicMessage, system json.RawMessag
 		}
 	}
 
-	// 转换每条消息
 	for _, msg := range messages {
 		cfMsg := CFMessage{Role: msg.Role}
 
-		// Anthropic content 可以是 string 或 content block 数组
 		if len(msg.Content) > 0 {
-			// 尝试解析为字符串
 			var contentStr string
 			if err := json.Unmarshal(msg.Content, &contentStr); err == nil {
 				parts := []CFContentPart{{Type: "text", Text: contentStr}}
@@ -619,10 +583,8 @@ func convertAnthropicMessages(messages []AnthropicMessage, system json.RawMessag
 				continue
 			}
 
-			// 解析为 content block 数组
 			var blocks []AnthropicContentBlock
 			if err := json.Unmarshal(msg.Content, &blocks); err == nil {
-				// 检查是否包含 tool_result 或 tool_use
 				hasToolResult := false
 				hasToolUse := false
 				for _, b := range blocks {
@@ -635,14 +597,12 @@ func convertAnthropicMessages(messages []AnthropicMessage, system json.RawMessag
 				}
 
 				if hasToolResult {
-					// tool_result 消息需要转换为 tool role 消息
 					for _, b := range blocks {
 						if b.Type == "tool_result" {
 							toolMsg := CFMessage{
 								Role:       "tool",
 								ToolCallID: b.ToolUseID,
 							}
-							// 提取 tool_result 的文本内容
 							resultText := extractToolResultContent(b)
 							parts := []CFContentPart{{Type: "text", Text: resultText}}
 							contentJSON, _ := json.Marshal(parts)
@@ -654,7 +614,6 @@ func convertAnthropicMessages(messages []AnthropicMessage, system json.RawMessag
 				}
 
 				if hasToolUse && msg.Role == "assistant" {
-					// assistant 消息中的 tool_use 块需要转换为 tool_calls
 					var textParts []CFContentPart
 					var oaiToolCalls []OAIToolCall
 					for _, b := range blocks {
@@ -687,13 +646,12 @@ func convertAnthropicMessages(messages []AnthropicMessage, system json.RawMessag
 					continue
 				}
 
-				// 普通文本消息块
+				// 普通文本消息
 				var parts []CFContentPart
 				for _, b := range blocks {
 					if b.Type == "text" {
 						parts = append(parts, CFContentPart{Type: "text", Text: b.Text})
 					} else if b.Type == "image" {
-						// 图片暂时跳过，CodeFlicker 不一定支持
 						parts = append(parts, CFContentPart{Type: "text", Text: "[图片内容已省略]"})
 					}
 				}
@@ -706,7 +664,6 @@ func convertAnthropicMessages(messages []AnthropicMessage, system json.RawMessag
 				continue
 			}
 
-			// 无法解析，原样传递
 			cfMsg.Content = msg.Content
 		}
 

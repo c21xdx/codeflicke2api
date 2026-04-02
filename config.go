@@ -2,20 +2,18 @@ package main
 
 import "os"
 
-// AppConfig 应用全局配置
 type AppConfig struct {
-	Port               string // 服务监听端口
-	AdminToken         string // 管理面板鉴权 Token
-	DefaultAPIKey      string // 默认 API Key
-	CodeFlickerBaseURL string // CodeFlicker 上游服务地址
-	DBPath             string // SQLite 数据库文件路径
-	RefreshConcurrency int    // Token 刷新并发数
-	RefreshRetries     int    // Token 刷新重试次数
-	ChatRetries        int    // 上游 Chat 接口请求重试次数
-	ProxyURL           string // HTTP 代理地址（例如 http://127.0.0.1:7890）
+	Port               string
+	AdminToken         string
+	DefaultAPIKey      string
+	CodeFlickerBaseURL string
+	DBPath             string
+	RefreshConcurrency int
+	RefreshRetries     int
+	ChatRetries        int
+	ProxyURL           string
 }
 
-// LoadConfig 从环境变量加载配置，未设置时使用默认值
 func LoadConfig() *AppConfig {
 	return &AppConfig{
 		Port:               getEnv("PORT", "8080"),
@@ -30,7 +28,6 @@ func LoadConfig() *AppConfig {
 	}
 }
 
-// getEnv 读取环境变量，若未设置则返回 fallback 默认值
 func getEnv(key, fallback string) string {
 	if val := os.Getenv(key); val != "" {
 		return val

@@ -8,15 +8,10 @@ import (
 	"gorm.io/gorm"
 )
 
-// APIKeyAuth 验证请求中的 API Key 是否有效且已启用。
-// 支持两种认证方式：
-//   - OpenAI 风格: Authorization: Bearer sk-xxx
-//   - Anthropic 风格: x-api-key: sk-xxx
 func APIKeyAuth(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var key string
 
-		// 优先从 Authorization 头提取 Bearer Token
 		auth := c.GetHeader("Authorization")
 		if auth != "" {
 			key = strings.TrimPrefix(auth, "Bearer ")
@@ -33,7 +28,6 @@ func APIKeyAuth(db *gorm.DB) gin.HandlerFunc {
 			}
 		}
 
-		// 回退到 x-api-key 头
 		if key == "" {
 			key = c.GetHeader("x-api-key")
 		}

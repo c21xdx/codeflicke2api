@@ -12,14 +12,12 @@ import (
 	"time"
 )
 
-// UpstreamClient 封装与 CodeFlicker 上游服务的 HTTP 通信
 type UpstreamClient struct {
 	baseURL    string
 	proxyURL   string
 	httpClient *http.Client
 }
 
-// NewUpstreamClient 创建上游请求客户端，支持可选的 HTTP 代理
 func NewUpstreamClient(baseURL, proxyURL string) *UpstreamClient {
 	transport := buildTransport(proxyURL)
 	return &UpstreamClient{
@@ -32,7 +30,6 @@ func NewUpstreamClient(baseURL, proxyURL string) *UpstreamClient {
 	}
 }
 
-// buildTransport 根据代理地址构建 http.Transport，为空时返回默认 Transport
 func buildTransport(proxyURL string) *http.Transport {
 	if proxyURL == "" {
 		return &http.Transport{}
@@ -46,13 +43,11 @@ func buildTransport(proxyURL string) *http.Transport {
 	}
 }
 
-// UpdateProxy 动态更新代理配置
 func (u *UpstreamClient) UpdateProxy(proxyURL string) {
 	u.proxyURL = proxyURL
 	u.httpClient.Transport = buildTransport(proxyURL)
 }
 
-// buildHeaders 构建模拟 CodeFlicker IDE 客户端的请求头
 func (u *UpstreamClient) buildHeaders(account *Account) map[string]string {
 	return map[string]string{
 		"Content-Type":       "application/json;charset=UTF-8",
@@ -65,7 +60,8 @@ func (u *UpstreamClient) buildHeaders(account *Account) map[string]string {
 	}
 }
 
-// CFChatRequest CodeFlicker Composer V2 聊天请求体
+// CodeFlicker Composer V2 请求/响应结构体
+
 type CFChatRequest struct {
 	SessionID           string          `json:"sessionId"`
 	ChatID              string          `json:"chatId"`
@@ -81,13 +77,11 @@ type CFChatRequest struct {
 	SystemPromptVersion string          `json:"systemPromptVersion,omitempty"`
 }
 
-// CFProjectInfo 项目上下文信息
 type CFProjectInfo struct {
 	GitURL   string `json:"gitUrl,omitempty"`
 	RepoName string `json:"repoName,omitempty"`
 }
 
-// CFMessage CodeFlicker 消息格式
 type CFMessage struct {
 	Role       string          `json:"role"`
 	Content    json.RawMessage `json:"content"`
@@ -96,20 +90,17 @@ type CFMessage struct {
 	ToolCallID string          `json:"tool_call_id,omitempty"`
 }
 
-// CFContentPart 消息内容片段（用于 content 为数组时的元素）
 type CFContentPart struct {
 	Type string `json:"type"`
 	Text string `json:"text,omitempty"`
 }
 
-// CFDeviceInfo 客户端设备信息
 type CFDeviceInfo struct {
 	Platform      string `json:"platform"`
 	IDEVersion    string `json:"ideVersion"`
 	PluginVersion string `json:"pluginVersion"`
 }
 
-// CFSSEEvent CodeFlicker SSE 事件载体
 type CFSSEEvent struct {
 	Type    string          `json:"type"`
 	Data    json.RawMessage `json:"data,omitempty"`
@@ -119,7 +110,6 @@ type CFSSEEvent struct {
 	Reply   string          `json:"reply,omitempty"`
 }
 
-// CFChatData SSE data 事件中的聊天补全数据
 type CFChatData struct {
 	ID      string     `json:"id"`
 	Object  string     `json:"object"`
@@ -129,34 +119,29 @@ type CFChatData struct {
 	Usage   *CFUsage   `json:"usage,omitempty"`
 }
 
-// CFChoice 补全选项
 type CFChoice struct {
 	Message      CFChoiceMessage `json:"message"`
 	FinishReason *string         `json:"finish_reason"`
 }
 
-// CFChoiceMessage 补全选项中的消息体
 type CFChoiceMessage struct {
 	Content   string          `json:"content"`
 	Role      string          `json:"role"`
 	ToolCalls json.RawMessage `json:"tool_calls,omitempty"`
 }
 
-// CFUsage Token 用量统计
 type CFUsage struct {
 	CompletionTokens int `json:"completion_tokens"`
 	PromptTokens     int `json:"prompt_tokens"`
 	TotalTokens      int `json:"total_tokens"`
 }
 
-// CFModelResponse 上游模型列表 API 响应
 type CFModelResponse struct {
 	Status  int             `json:"status"`
 	Message string          `json:"message"`
 	Data    json.RawMessage `json:"data"`
 }
 
-// CFModelItem 上游模型条目
 type CFModelItem struct {
 	ModelType    string `json:"modelType"`
 	Name         string `json:"name"`
@@ -166,7 +151,6 @@ type CFModelItem struct {
 	SupportImage bool   `json:"supportImage"`
 }
 
-// GetModels 获取上游 Agent 模型列表并去重
 func (u *UpstreamClient) GetModels(account *Account) ([]CFModelItem, error) {
 	agentURL := fmt.Sprintf("%s/api/proxy/eapi/kwaipilot/model/list?feature=agent", u.baseURL)
 	agentModels, err := u.fetchModels(agentURL, account)
@@ -186,7 +170,6 @@ func (u *UpstreamClient) GetModels(account *Account) ([]CFModelItem, error) {
 	return models, nil
 }
 
-// fetchModels 从指定 URL 拉取并解析模型列表
 func (u *UpstreamClient) fetchModels(url string, account *Account) ([]CFModelItem, error) {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -225,8 +208,7 @@ func (u *UpstreamClient) fetchModels(url string, account *Account) ([]CFModelIte
 	return models, nil
 }
 
-// StreamChatCompletion 向上游发送聊天请求并返回 SSE 流式响应。
-// 使用无超时的 HTTP Client，因为 SSE 流可能持续较长时间。
+// StreamChatCompletion 向上游发送聊天请求并返回 SSE 流式响应（使用无超时 Client）
 func (u *UpstreamClient) StreamChatCompletion(account *Account, cfReq *CFChatRequest) (*http.Response, error) {
 	url := fmt.Sprintf("%s/api/proxy/sse/eapi/kwaipilot/plugin/composer/v2/chat/completions", u.baseURL)
 
@@ -249,8 +231,7 @@ func (u *UpstreamClient) StreamChatCompletion(account *Account, cfReq *CFChatReq
 	return client.Do(req)
 }
 
-// ParseSSEStream 解析 CodeFlicker SSE 流，通过 channel 异步返回解析后的事件。
-// 遇到 [DONE] 标记或流结束时关闭 channel。
+// ParseSSEStream 解析 CodeFlicker SSE 流，遇到 [DONE] 或流结束时关闭 channel
 func ParseSSEStream(reader io.Reader) <-chan CFSSEEvent {
 	ch := make(chan CFSSEEvent, 64)
 

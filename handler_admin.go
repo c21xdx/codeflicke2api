@@ -16,19 +16,16 @@ import (
 	"gorm.io/gorm"
 )
 
-// AdminHandler 管理面板 API 处理器
 type AdminHandler struct {
 	db       *gorm.DB
 	cfg      *AppConfig
 	upstream *UpstreamClient
 }
 
-// NewAdminHandler 创建管理面板处理器
 func NewAdminHandler(db *gorm.DB, cfg *AppConfig, upstream *UpstreamClient) *AdminHandler {
 	return &AdminHandler{db: db, cfg: cfg, upstream: upstream}
 }
 
-// HandleLogin 管理面板登录验证
 func (h *AdminHandler) HandleLogin(c *gin.Context) {
 	var req struct {
 		Token string `json:"token"`
@@ -44,14 +41,12 @@ func (h *AdminHandler) HandleLogin(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "登录成功", "token": h.cfg.AdminToken})
 }
 
-// HandleListAccounts 获取所有账号列表
 func (h *AdminHandler) HandleListAccounts(c *gin.Context) {
 	var accounts []Account
 	h.db.Order("id ASC").Find(&accounts)
 	c.JSON(http.StatusOK, gin.H{"data": accounts})
 }
 
-// HandleCreateAccount 创建单个账号
 func (h *AdminHandler) HandleCreateAccount(c *gin.Context) {
 	var req struct {
 		Name     string `json:"name"`
@@ -78,7 +73,6 @@ func (h *AdminHandler) HandleCreateAccount(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "创建成功", "data": account})
 }
 
-// HandleUpdateAccount 更新指定账号信息（支持部分更新）
 func (h *AdminHandler) HandleUpdateAccount(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -124,7 +118,6 @@ func (h *AdminHandler) HandleUpdateAccount(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "更新成功", "data": account})
 }
 
-// HandleDeleteAccount 删除指定账号
 func (h *AdminHandler) HandleDeleteAccount(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -138,14 +131,12 @@ func (h *AdminHandler) HandleDeleteAccount(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
 }
 
-// HandleListKeys 获取所有 API Key 列表
 func (h *AdminHandler) HandleListKeys(c *gin.Context) {
 	var keys []APIKey
 	h.db.Order("id ASC").Find(&keys)
 	c.JSON(http.StatusOK, gin.H{"data": keys})
 }
 
-// HandleCreateKey 创建 API Key
 func (h *AdminHandler) HandleCreateKey(c *gin.Context) {
 	var req struct {
 		Key  string `json:"key"`
@@ -168,7 +159,6 @@ func (h *AdminHandler) HandleCreateKey(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "创建成功", "data": apiKey})
 }
 
-// HandleDeleteKey 删除指定 API Key
 func (h *AdminHandler) HandleDeleteKey(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -182,7 +172,6 @@ func (h *AdminHandler) HandleDeleteKey(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
 }
 
-// HandleToggleKey 切换 API Key 的启用/禁用状态
 func (h *AdminHandler) HandleToggleKey(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -228,7 +217,7 @@ func (h *AdminHandler) HandleStats(c *gin.Context) {
 		activeAccounts = 0
 	}
 
-	// 汇总 token 用量和调用次数
+
 	var totalInputTokens, totalOutputTokens int64
 	var totalRequests int64
 	h.db.Model(&UsageLog{}).Select("COALESCE(SUM(input_tokens), 0)").Scan(&totalInputTokens)
@@ -247,7 +236,6 @@ func (h *AdminHandler) HandleStats(c *gin.Context) {
 	})
 }
 
-// BatchImportItem 批量导入的单条账号数据
 type BatchImportItem struct {
 	UserID    *string `json:"userId"`
 	Username  *string `json:"username"`
@@ -257,7 +245,6 @@ type BatchImportItem struct {
 	Timestamp string  `json:"timestamp"`
 }
 
-// HandleBatchImport 通过 JSON 数组批量导入账号
 func (h *AdminHandler) HandleBatchImport(c *gin.Context) {
 	var items []BatchImportItem
 	if err := c.ShouldBindJSON(&items); err != nil {
@@ -267,7 +254,6 @@ func (h *AdminHandler) HandleBatchImport(c *gin.Context) {
 	c.JSON(http.StatusOK, h.batchImportAccounts(items))
 }
 
-// HandleFileImport 通过上传 JSON 文件批量导入账号
 func (h *AdminHandler) HandleFileImport(c *gin.Context) {
 	file, _, err := c.Request.FormFile("file")
 	if err != nil {
@@ -290,7 +276,7 @@ func (h *AdminHandler) HandleFileImport(c *gin.Context) {
 	c.JSON(http.StatusOK, h.batchImportAccounts(items))
 }
 
-// batchImportAccounts 批量导入账号的核心逻辑，自动从 JWT 提取 userId 并跳过重复账号
+// batchImportAccounts 批量导入核心逻辑，自动从 JWT 提取 userId 并跳过重复账号
 func (h *AdminHandler) batchImportAccounts(items []BatchImportItem) gin.H {
 	var imported, skipped, failed int
 	var errors []string
@@ -346,7 +332,7 @@ func (h *AdminHandler) batchImportAccounts(items []BatchImportItem) gin.H {
 	}
 }
 
-// extractUserIDFromJWT 从 JWT Payload 中提取 userId 字段（不验证签名）
+// extractUserIDFromJWT 从 JWT Payload 中提取 userId（不验证签名）
 func extractUserIDFromJWT(token string) (string, error) {
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
@@ -411,7 +397,6 @@ func extractExpFromJWT(token string) int64 {
 	return exp
 }
 
-// HandleGetSettings 获取当前系统设置
 func (h *AdminHandler) HandleGetSettings(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"admin_token":         h.cfg.AdminToken,
@@ -502,7 +487,6 @@ func (h *AdminHandler) HandleUpdateSettings(c *gin.Context) {
 	})
 }
 
-// refreshResult 单个账号的 Token 刷新结果
 type refreshResult struct {
 	ID      uint   `json:"id"`
 	Name    string `json:"name"`
@@ -511,7 +495,7 @@ type refreshResult struct {
 	Message string `json:"message"`
 }
 
-// HandleRefreshTokens 并发刷新所有配置了邮箱密码的账号的 JWT Token
+// HandleRefreshTokens 并发刷新所有配置了 email/password 的账号的 JWT Token
 func (h *AdminHandler) HandleRefreshTokens(c *gin.Context) {
 	var accounts []Account
 	h.db.Where("email != '' AND password != ''").Find(&accounts)
@@ -575,7 +559,6 @@ func (h *AdminHandler) HandleRefreshTokens(c *gin.Context) {
 	})
 }
 
-// refreshSingleToken 通过邮箱密码登录获取新的 JWT Token
 func (h *AdminHandler) refreshSingleToken(email, password string) (string, error) {
 	loginURL := h.cfg.CodeFlickerBaseURL + "/api/auth/email/login"
 

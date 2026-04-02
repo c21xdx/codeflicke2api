@@ -9,47 +9,42 @@ import (
 	"gorm.io/gorm"
 )
 
-// Account CodeFlicker 上游账号模型
 type Account struct {
 	ID        uint       `gorm:"primaryKey" json:"id"`
-	Name      string     `json:"name"`                          // 备注名
-	UserID    string     `json:"user_id"`                       // 上游用户标识（kwaipilot-username）
-	JWTToken  string     `json:"jwt_token"`                     // 上游 Bearer Token
-	Email     string     `json:"email"`                         // 登录邮箱
-	Password  string     `json:"password"`                      // 登录密码
-	IsActive  bool       `gorm:"default:true" json:"is_active"` // 是否启用
-	Status    string     `gorm:"default:normal" json:"status"`  // 状态: normal / error / rate_limited
-	LastUsed  *time.Time `json:"last_used"`                     // 最近一次使用时间
+	Name      string     `json:"name"`
+	UserID    string     `json:"user_id"`
+	JWTToken  string     `json:"jwt_token"`
+	Email     string     `json:"email"`
+	Password  string     `json:"password"`
+	IsActive  bool       `gorm:"default:true" json:"is_active"`
+	Status    string     `gorm:"default:normal" json:"status"` // normal / error / rate_limited
+	LastUsed  *time.Time `json:"last_used"`
 	CreatedAt time.Time  `json:"created_at"`
 	UpdatedAt time.Time  `json:"updated_at"`
 }
 
-// APIKey 外部调用方的 API 鉴权密钥
 type APIKey struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
-	Key       string    `gorm:"uniqueIndex" json:"key"` // 密钥值（sk-xxx 格式）
-	Name      string    `json:"name"`                   // 备注名
+	Key       string    `gorm:"uniqueIndex" json:"key"`
+	Name      string    `json:"name"`
 	IsActive  bool      `gorm:"default:true" json:"is_active"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// SystemSetting 系统配置持久化存储（键值对）
 type SystemSetting struct {
 	Key   string `gorm:"primaryKey" json:"key"`
 	Value string `json:"value"`
 }
 
-// UsageLog API 调用用量记录
 type UsageLog struct {
 	ID           uint      `gorm:"primaryKey" json:"id"`
-	InputTokens  int       `json:"input_tokens"`  // 输入 Token 数
-	OutputTokens int       `json:"output_tokens"` // 输出 Token 数
-	Model        string    `json:"model"`         // 使用的模型
-	APIType      string    `json:"api_type"`      // 接口类型: openai / anthropic
+	InputTokens  int       `json:"input_tokens"`
+	OutputTokens int       `json:"output_tokens"`
+	Model        string    `json:"model"`
+	APIType      string    `json:"api_type"` // openai / anthropic
 	CreatedAt    time.Time `json:"created_at"`
 }
 
-// InitDB 初始化 SQLite 连接并执行表结构自动迁移
 func InitDB(dbPath string) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
 	if err != nil {
@@ -96,7 +91,6 @@ func LoadSettingsIntoCfg(db *gorm.DB, cfg *AppConfig) {
 	}
 }
 
-// EnsureDefaultAPIKey 检查并创建默认 API Key（首次启动时）
 func EnsureDefaultAPIKey(db *gorm.DB, defaultKey string) {
 	var count int64
 	db.Model(&APIKey{}).Where("key = ?", defaultKey).Count(&count)

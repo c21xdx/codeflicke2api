@@ -15,7 +15,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// OAIChatRequest OpenAI 格式的聊天补全请求
+// OpenAI 兼容 API 请求/响应结构体
+
 type OAIChatRequest struct {
 	Model       string          `json:"model"`
 	Messages    []OAIMessage    `json:"messages"`
@@ -25,7 +26,6 @@ type OAIChatRequest struct {
 	Tools       json.RawMessage `json:"tools,omitempty"`
 }
 
-// OAIMessage OpenAI 格式消息（content 支持 string 或 array）
 type OAIMessage struct {
 	Role       string          `json:"role"`
 	Content    json.RawMessage `json:"content"`
@@ -33,13 +33,11 @@ type OAIMessage struct {
 	ToolCallID string          `json:"tool_call_id,omitempty"`
 }
 
-// OAIModelList 模型列表响应
 type OAIModelList struct {
 	Object string     `json:"object"`
 	Data   []OAIModel `json:"data"`
 }
 
-// OAIModel 单个模型信息
 type OAIModel struct {
 	ID      string `json:"id"`
 	Object  string `json:"object"`
@@ -47,7 +45,6 @@ type OAIModel struct {
 	OwnedBy string `json:"owned_by"`
 }
 
-// OAIChatResponse 非流式聊天补全响应
 type OAIChatResponse struct {
 	ID      string      `json:"id"`
 	Object  string      `json:"object"`
@@ -57,7 +54,6 @@ type OAIChatResponse struct {
 	Usage   *OAIUsage   `json:"usage,omitempty"`
 }
 
-// OAIChoice 补全选项
 type OAIChoice struct {
 	Index        int             `json:"index"`
 	Message      *OAIRespMessage `json:"message,omitempty"`
@@ -65,21 +61,18 @@ type OAIChoice struct {
 	FinishReason *string         `json:"finish_reason"`
 }
 
-// OAIRespMessage 响应消息体
 type OAIRespMessage struct {
 	Role      string          `json:"role,omitempty"`
 	Content   string          `json:"content,omitempty"`
 	ToolCalls json.RawMessage `json:"tool_calls,omitempty"`
 }
 
-// OAIUsage Token 用量统计
 type OAIUsage struct {
 	PromptTokens     int `json:"prompt_tokens"`
 	CompletionTokens int `json:"completion_tokens"`
 	TotalTokens      int `json:"total_tokens"`
 }
 
-// OAIStreamChunk 流式响应数据块
 type OAIStreamChunk struct {
 	ID      string      `json:"id"`
 	Object  string      `json:"object"`
@@ -88,20 +81,17 @@ type OAIStreamChunk struct {
 	Choices []OAIChoice `json:"choices"`
 }
 
-// OpenAIHandler OpenAI 兼容 API 的请求处理器
 type OpenAIHandler struct {
 	pool     *AccountPool
 	upstream *UpstreamClient
 	cfg      *AppConfig
 	db       *gorm.DB
 }
-
-// NewOpenAIHandler 创建 OpenAI 兼容处理器
 func NewOpenAIHandler(pool *AccountPool, upstream *UpstreamClient, cfg *AppConfig, db *gorm.DB) *OpenAIHandler {
 	return &OpenAIHandler{pool: pool, upstream: upstream, cfg: cfg, db: db}
 }
 
-// modelNameMapping 上游模型标识 → 用户友好名称
+// 上游模型标识 ↔ 用户友好名称的双向映射
 var modelNameMapping = map[string]string{
 	"GLM_5_TOC":         "glm-5",
 	"MINIMAX_M2_1_TOC":  "minimax-m2.5",
@@ -113,7 +103,6 @@ var modelNameMapping = map[string]string{
 	"MINIMAX_M2_5_TOC":  "minimax-m2",
 }
 
-// reverseModelMapping 用户友好名称 → 上游模型标识（启动时自动生成）
 var reverseModelMapping = func() map[string]string {
 	m := make(map[string]string, len(modelNameMapping))
 	for upstream, friendly := range modelNameMapping {
@@ -122,13 +111,11 @@ var reverseModelMapping = func() map[string]string {
 	return m
 }()
 
-// mapModelName 将上游模型标识转换为用户友好名称
 func mapModelName(upstreamName string) (string, bool) {
 	friendly, ok := modelNameMapping[upstreamName]
 	return friendly, ok
 }
 
-// resolveModelName 将用户传入的模型名解析为上游标识，支持友好名和原始名
 func resolveModelName(userModel string) string {
 	if upstream, ok := reverseModelMapping[userModel]; ok {
 		return upstream
@@ -136,7 +123,7 @@ func resolveModelName(userModel string) string {
 	return userModel
 }
 
-// builtinModels 内置模型列表，作为上游不可用时的降级方案
+// builtinModels 上游不可用时的降级模型列表
 var builtinModels = []OAIModel{
 	{ID: "glm-5", Object: "model", Created: 1700000000, OwnedBy: "zhipu"},
 	{ID: "glm-4.7", Object: "model", Created: 1700000000, OwnedBy: "zhipu"},
@@ -148,7 +135,6 @@ var builtinModels = []OAIModel{
 	{ID: "deepseek-v3.2", Object: "model", Created: 1700000000, OwnedBy: "deepseek"},
 }
 
-// HandleModels 返回可用模型列表，优先从上游获取，失败时降级为内置列表
 func (h *OpenAIHandler) HandleModels(c *gin.Context) {
 	account, err := h.pool.GetNextAccount()
 	if err == nil {
@@ -170,7 +156,6 @@ func (h *OpenAIHandler) HandleModels(c *gin.Context) {
 	c.JSON(http.StatusOK, OAIModelList{Object: "list", Data: builtinModels})
 }
 
-// HandleChatCompletions 处理聊天补全请求，转换 OpenAI→CodeFlicker 格式并代理。
 func (h *OpenAIHandler) HandleChatCompletions(c *gin.Context) {
 	var req OAIChatRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -255,7 +240,7 @@ func (h *OpenAIHandler) HandleChatCompletions(c *gin.Context) {
 			return
 		}
 
-		// 请求成功，处理响应
+
 		if attempt > 1 {
 			log.Printf("上游请求在第 %d 次重试后成功", attempt)
 		}
@@ -271,7 +256,6 @@ func (h *OpenAIHandler) HandleChatCompletions(c *gin.Context) {
 	}
 }
 
-// handleStreamResponse 将上游 SSE 流转换为 OpenAI 流式格式逐块输出
 func (h *OpenAIHandler) handleStreamResponse(c *gin.Context, body io.Reader, model string, account *Account) {
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
@@ -354,7 +338,6 @@ done:
 	h.recordUsage(model, streamInputTokens, streamOutputTokens)
 }
 
-// recordUsage 记录本次请求的 token 用量
 func (h *OpenAIHandler) recordUsage(model string, inputTokens, outputTokens int) {
 	if inputTokens == 0 && outputTokens == 0 {
 		return
@@ -367,7 +350,6 @@ func (h *OpenAIHandler) recordUsage(model string, inputTokens, outputTokens int)
 	})
 }
 
-// handleNonStreamResponse 累积上游 SSE 流全部数据，组装为 OpenAI 非流式响应返回
 func (h *OpenAIHandler) handleNonStreamResponse(c *gin.Context, body io.Reader, model string, account *Account) {
 	respID := "chatcmpl-" + uuid.New().String()[:8]
 	created := time.Now().Unix()
@@ -427,7 +409,6 @@ func (h *OpenAIHandler) handleNonStreamResponse(c *gin.Context, body io.Reader, 
 	if len(lastToolCalls) > 0 {
 		finishReason = "tool_calls"
 	}
-	// 记录用量
 	if usage != nil {
 		h.recordUsage(model, usage.PromptTokens, usage.CompletionTokens)
 	}
@@ -442,7 +423,7 @@ func (h *OpenAIHandler) handleNonStreamResponse(c *gin.Context, body io.Reader, 
 	})
 }
 
-// markAccountByError 根据上游错误码标记账号状态
+// markAccountByError 根据上游错误码标记账号状态（reply=15/61 → 限流，403/802 → 封禁）
 func (h *OpenAIHandler) markAccountByError(event CFSSEEvent, account *Account) {
 	switch {
 	case event.Reply == "15" || event.Reply == "61":
@@ -452,8 +433,7 @@ func (h *OpenAIHandler) markAccountByError(event CFSSEEvent, account *Account) {
 	}
 }
 
-// convertMessages 将 OpenAI 消息转换为 CodeFlicker 格式。
-// 执行角色映射（developer→system, function→tool）和 content 格式归一化（string→array）。
+// convertMessages 将 OpenAI 消息转换为 CodeFlicker 格式（角色映射 + content 归一化）
 func convertMessages(messages []OAIMessage) []CFMessage {
 	cfMessages := make([]CFMessage, 0, len(messages))
 	for _, msg := range messages {

@@ -26,7 +26,6 @@ func main() {
 
 	r := gin.Default()
 
-	// CORS 中间件
 	r.Use(func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
@@ -38,7 +37,6 @@ func main() {
 		c.Next()
 	})
 
-	// OpenAI 兼容端点和 messages 兼容端点
 	v1 := r.Group("/v1", APIKeyAuth(db))
 	{
 		v1.GET("/models", oaiHandler.HandleModels)
@@ -46,7 +44,6 @@ func main() {
 		v1.POST("/messages", anthropicHandler.HandleMessages)
 	}
 
-	// 管理面板 API
 	r.POST("/admin/login", adminHandler.HandleLogin)
 
 	admin := r.Group("/admin", AdminAuth(cfg))
@@ -70,7 +67,6 @@ func main() {
 		admin.PUT("/settings", adminHandler.HandleUpdateSettings)
 	}
 
-	// 管理面板前端静态文件
 	indexHTML, err := webFS.ReadFile("web/index.html")
 	if err != nil {
 		log.Fatalf("加载前端文件失败: %v", err)
