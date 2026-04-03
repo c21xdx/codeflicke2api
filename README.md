@@ -79,4 +79,6 @@ Go + Gin + GORM + SQLite
 
 ## Star History
 
+[![GitHub Stars](https://img.shields.io/github/stars/Futureppo/codeflicke2api?logo=github&style=flat-square)](https://github.com/Futureppo/codeflicke2api/stargazers)
+
 [![Star History Chart](https://api.star-history.com/svg?repos=Futureppo/codeflicke2api&type=Date)](https://star-history.com/#Futureppo/codeflicke2api&Date)
